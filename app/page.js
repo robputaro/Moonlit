@@ -100,7 +100,7 @@ async function removeSavedStory(id) {
 const emptyForm = {
   childName: '',
   age: '4',
-  pronouns: 'they/them',
+  pronouns: 'use-name',
   appearance: '',
   storyMode: 'Challenge',
   challenge: 'Giving up the pacifier',
@@ -370,7 +370,7 @@ export default function Home() {
                 <label>Age<select value={form.age} onChange={(e) => update('age', e.target.value)}>{Array.from({length: 9}, (_, i) => <option key={i+2}>{i+2}</option>)}</select></label>
               </div>
               <div className="field-grid two">
-                <label>Pronouns<select value={form.pronouns} onChange={(e) => update('pronouns', e.target.value)}><option>they/them</option><option>he/him</option><option>she/her</option></select></label>
+                <label>Pronouns<select value={form.pronouns} onChange={(e) => update('pronouns', e.target.value)}><option value="use-name">Use child’s name only</option><option value="he/him">He/him</option><option value="she/her">She/her</option><option value="they/them">They/them</option></select></label>
                 <label>Appearance <span className="optional">optional</span><input value={form.appearance} onChange={(e) => update('appearance', e.target.value)} placeholder="Curly brown hair, green pajamas" /></label>
               </div>
 
