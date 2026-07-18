@@ -615,7 +615,7 @@ export default function Home() {
                 <div className="hill one"></div>
                 <div className="hill two"></div>
                 <div className="star s1">✦</div><div className="star s2">✦</div><div className="star s3">•</div>
-                <div className="child-shape">♟</div>
+                <div className="child-shape">✦</div>
               </div>
             </section>
 
