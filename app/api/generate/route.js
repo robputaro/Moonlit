@@ -37,11 +37,16 @@ function demoStory(input) {
   };
 }
 
+function pronounInstruction(value) {
+  if (value === 'use-name') return "Use the child's name instead of pronouns whenever practical.";
+  return `Use ${value || 'they/them'} pronouns.`;
+}
+
 function buildPrompt(input) {
   return `You are a thoughtful children's storybook author. Create a safe, warm, age-appropriate personalized story for a ${input.age}-year-old child.
 
 Child: ${input.childName}
-Pronouns: ${input.pronouns}
+${pronounInstruction(input.pronouns)}
 Appearance: ${input.appearance || 'not specified'}
 Story mode: ${input.storyMode || 'Challenge'}
 Challenge: ${input.challenge || 'not specified'}
