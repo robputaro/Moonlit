@@ -146,6 +146,7 @@ export default function Home() {
   const [authMessage, setAuthMessage] = useState('');
   const [localImportCount, setLocalImportCount] = useState(0);
   const [importingStories, setImportingStories] = useState(false);
+  const [theme, setTheme] = useState('light');
 
   const progress = useMemo(() => {
     if (step === 'create') return 1;
@@ -153,6 +154,20 @@ export default function Home() {
     if (step === 'read') return 3;
     return 0;
   }, [step]);
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem('moonlit-theme');
+    const systemPrefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+    setTheme(savedTheme || (systemPrefersDark ? 'dark' : 'light'));
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    window.localStorage.setItem('moonlit-theme', theme);
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) themeMeta.setAttribute('content', theme === 'dark' ? '#12101d' : '#f7f0e5');
+  }, [theme]);
 
   useEffect(() => {
     if (!loading) return undefined;
@@ -587,7 +602,7 @@ export default function Home() {
           <span className="brand-mark">☾</span>
           <span>moonlit</span>
         </a>
-        <div className="header-actions-global"><button type="button" onClick={openLibrary}>My stories</button>{supabaseConfigured ? (user ? <div className="account-chip"><span>{user.email}</span><button type="button" onClick={signOut}>Sign out</button></div> : <button type="button" className="sign-in-button" onClick={() => requestSignIn()}>Sign in</button>) : <div className="header-note">Local preview mode</div>}</div>
+        <div className="header-actions-global"><button type="button" className="theme-toggle-button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'} title={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Bedtime'}</span></button><button type="button" onClick={openLibrary}>My stories</button>{supabaseConfigured ? (user ? <div className="account-chip"><span>{user.email}</span><button type="button" onClick={signOut}>Sign out</button></div> : <button type="button" className="sign-in-button" onClick={() => requestSignIn()}>Sign in</button>) : <div className="header-note">Local preview mode</div>}</div>
       </header>
 
       <section className="shell">
