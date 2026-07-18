@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { authenticateRequest } from '../../../lib/supabase-server';
 
 function demoStory(input) {
   const name = input.childName || 'August';
@@ -152,6 +153,10 @@ async function generateWithRetry(generator, input, attempts = 2) {
 
 export async function POST(request) {
   try {
+    const auth = await authenticateRequest(request);
+    if (auth.configured && !auth.user) {
+      return NextResponse.json({ error: 'Please sign in to create stories.' }, { status: 401 });
+    }
     const input = await request.json();
     if (!input.childName) return NextResponse.json({ error: 'Please include a child name.' }, { status: 400 });
 

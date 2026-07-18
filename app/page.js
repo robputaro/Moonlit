@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { supabase, supabaseConfigured } from '../lib/supabase-browser';
 
 const challenges = [
   ['Giving up the pacifier', 'A gentle goodbye to a familiar comfort'],
@@ -97,6 +98,12 @@ async function removeSavedStory(id) {
   });
 }
 
+async function dataUrlToBlob(dataUrl) {
+  const response = await fetch(dataUrl);
+  return response.blob();
+}
+
+
 const emptyForm = {
   childName: '',
   age: '4',
@@ -129,6 +136,16 @@ export default function Home() {
   const [savedStories, setSavedStories] = useState([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const [session, setSession] = useState(null);
+  const [user, setUser] = useState(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState('signup');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authMessage, setAuthMessage] = useState('');
+  const [localImportCount, setLocalImportCount] = useState(0);
+  const [importingStories, setImportingStories] = useState(false);
 
   const progress = useMemo(() => {
     if (step === 'create') return 1;
@@ -148,16 +165,199 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [loading]);
 
+  useEffect(() => {
+    if (!supabaseConfigured) return undefined;
+
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session || null);
+      setUser(data.session?.user || null);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession || null);
+      setUser(nextSession?.user || null);
+      if (nextSession?.user) {
+        setAuthOpen(false);
+        window.setTimeout(async () => {
+          try {
+            const localStories = await getSavedStories();
+            setLocalImportCount(localStories.length);
+          } catch {}
+        }, 0);
+      }
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  function requestSignIn(message = 'Create a free account to save and continue your stories anywhere.') {
+    setAuthMessage(message);
+    setAuthOpen(true);
+  }
+
+  async function submitAuth(event) {
+    event.preventDefault();
+    if (!supabaseConfigured) return;
+    setAuthLoading(true);
+    setAuthMessage('');
+    try {
+      const result = authMode === 'signup'
+        ? await supabase.auth.signUp({ email: authEmail, password: authPassword })
+        : await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      if (result.error) throw result.error;
+      if (authMode === 'signup' && !result.data.session) {
+        setAuthMessage('Check your email to confirm your account, then return to Moonlit.');
+      } else {
+        setAuthMessage('You’re signed in.');
+        setAuthOpen(false);
+      }
+    } catch (err) {
+      setAuthMessage(err.message || 'Moonlit could not sign you in.');
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function signOut() {
+    if (supabase) await supabase.auth.signOut();
+    setSession(null);
+    setUser(null);
+    setSavedStories([]);
+    setStep('create');
+  }
+
+  async function getAccessToken() {
+    if (!supabaseConfigured) return '';
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token || '';
+  }
+
+  async function authenticatedFetch(url, options = {}) {
+    const token = await getAccessToken();
+    if (supabaseConfigured && !token) {
+      requestSignIn('Sign in before creating a story so it can be saved to your shelf.');
+      throw new Error('Please sign in to continue.');
+    }
+    return fetch(url, {
+      ...options,
+      headers: { ...(options.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+    });
+  }
+
+  async function signedAssetUrl(path) {
+    if (!path || !supabaseConfigured) return '';
+    const { data, error: signedError } = await supabase.storage.from('story-assets').createSignedUrl(path, 60 * 60 * 6);
+    if (signedError) return '';
+    return data.signedUrl;
+  }
+
+  async function hydrateCloudRecord(row) {
+    const storyData = structuredClone(row.story_data || {});
+    if (storyData.coverImagePath || row.cover_path) {
+      storyData.coverImagePath = storyData.coverImagePath || row.cover_path;
+      storyData.coverImageUrl = await signedAssetUrl(storyData.coverImagePath);
+    }
+    storyData.pages = await Promise.all((storyData.pages || []).map(async (page) => ({
+      ...page,
+      imageUrl: page.imagePath ? await signedAssetUrl(page.imagePath) : ''
+    })));
+    return {
+      id: row.id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      title: row.title,
+      childName: row.child_name,
+      coverImageUrl: storyData.coverImageUrl || '',
+      form: row.form_data || {},
+      story: storyData
+    };
+  }
+
+  async function uploadStoryAsset(path, dataUrl) {
+    if (!dataUrl?.startsWith('data:image')) return path || '';
+    const blob = await dataUrlToBlob(dataUrl);
+    const { error: uploadError } = await supabase.storage.from('story-assets').upload(path, blob, {
+      upsert: true,
+      contentType: blob.type || 'image/png',
+      cacheControl: '3600'
+    });
+    if (uploadError) throw uploadError;
+    return path;
+  }
+
+  async function saveRecordToCloud({ id, story: sourceStory, form: sourceForm, createdAt }) {
+    const now = new Date().toISOString();
+    const cloudStory = structuredClone(sourceStory);
+    const basePath = `${user.id}/${id}`;
+
+    if (cloudStory.coverImageUrl?.startsWith('data:image')) {
+      cloudStory.coverImagePath = await uploadStoryAsset(`${basePath}/cover.png`, cloudStory.coverImageUrl);
+    }
+    cloudStory.coverImageUrl = '';
+
+    cloudStory.pages = await Promise.all((cloudStory.pages || []).map(async (page, index) => {
+      const next = { ...page };
+      if (next.imageUrl?.startsWith('data:image')) {
+        next.imagePath = await uploadStoryAsset(`${basePath}/page-${index + 1}.png`, next.imageUrl);
+      }
+      next.imageUrl = '';
+      return next;
+    }));
+
+    const { error: saveError } = await supabase.from('stories').upsert({
+      id,
+      user_id: user.id,
+      title: cloudStory.title,
+      child_name: cloudStory.characterBible?.name || sourceForm.childName || '',
+      cover_path: cloudStory.coverImagePath || null,
+      form_data: sourceForm,
+      story_data: cloudStory,
+      created_at: createdAt || now,
+      updated_at: now
+    }, { onConflict: 'id' });
+    if (saveError) throw saveError;
+    return { id, now };
+  }
+
+  async function importLocalStories() {
+    if (!user || !supabaseConfigured) return;
+    setImportingStories(true);
+    setError('');
+    try {
+      const localStories = await getSavedStories();
+      for (const record of localStories) {
+        await saveRecordToCloud({
+          id: record.id || crypto.randomUUID(),
+          story: record.story,
+          form: record.form || emptyForm,
+          createdAt: record.createdAt
+        });
+      }
+      setLocalImportCount(0);
+      await refreshLibrary();
+      setSaveMessage(`${localStories.length} local ${localStories.length === 1 ? 'story' : 'stories'} added to your account`);
+    } catch (err) {
+      console.error(err);
+      setError('Moonlit could not import every local story. Your originals are still safe in this browser.');
+    } finally {
+      setImportingStories(false);
+    }
+  }
+
   function update(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
   async function generateStory(event) {
     event.preventDefault();
+    if (supabaseConfigured && !user) {
+      requestSignIn('Create a free Moonlit account before generating so this story can stay on your shelf.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/generate', {
+      const response = await authenticatedFetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form)
@@ -196,7 +396,7 @@ export default function Home() {
       setImageLoadingMessage((current) => ({ ...current, [index]: imageLoadingMessages[messageIndex] }));
     }, 4500);
     try {
-      const response = await fetch('/api/illustrate', {
+      const response = await authenticatedFetch('/api/illustrate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -226,7 +426,7 @@ export default function Home() {
     setCoverLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/illustrate', {
+      const response = await authenticatedFetch('/api/illustrate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -264,43 +464,69 @@ export default function Home() {
     setLibraryLoading(true);
     setError('');
     try {
-      setSavedStories(await getSavedStories());
+      if (supabaseConfigured) {
+        if (!user) {
+          setSavedStories([]);
+          return;
+        }
+        const { data, error: libraryError } = await supabase
+          .from('stories')
+          .select('*')
+          .order('updated_at', { ascending: false });
+        if (libraryError) throw libraryError;
+        setSavedStories(await Promise.all((data || []).map(hydrateCloudRecord)));
+      } else {
+        setSavedStories(await getSavedStories());
+      }
     } catch (err) {
-      setError('Moonlit could not open the story library in this browser.');
+      console.error(err);
+      setError('Moonlit could not open your story shelf. Check the Supabase setup and try again.');
     } finally {
       setLibraryLoading(false);
     }
   }
 
   async function openLibrary() {
+    if (supabaseConfigured && !user) {
+      requestSignIn('Sign in to open your Moonlit story shelf.');
+      return;
+    }
     setStep('library');
     await refreshLibrary();
   }
 
   async function saveToLibrary() {
     if (!story) return;
+    if (supabaseConfigured && !user) {
+      requestSignIn('Sign in to save this story to your Moonlit shelf.');
+      return;
+    }
     setError('');
     setSaveMessage('Saving…');
     try {
       const id = storyId || crypto.randomUUID();
       const now = new Date().toISOString();
-      await putSavedStory({
-        id,
-        createdAt: story.createdAt || now,
-        updatedAt: now,
-        title: story.title,
-        childName: story.characterBible?.name || form.childName,
-        coverImageUrl: story.coverImageUrl || '',
-        form,
-        story: { ...story, createdAt: story.createdAt || now }
-      });
+      if (supabaseConfigured) {
+        await saveRecordToCloud({ id, story, form, createdAt: story.createdAt || now });
+      } else {
+        await putSavedStory({
+          id,
+          createdAt: story.createdAt || now,
+          updatedAt: now,
+          title: story.title,
+          childName: story.characterBible?.name || form.childName,
+          coverImageUrl: story.coverImageUrl || '',
+          form,
+          story: { ...story, createdAt: story.createdAt || now }
+        });
+      }
       setStoryId(id);
       setStory((current) => ({ ...current, createdAt: current.createdAt || now }));
-      setSaveMessage('Saved to My Stories');
+      setSaveMessage(supabaseConfigured ? 'Saved to your cloud shelf' : 'Saved to My Stories');
       window.setTimeout(() => setSaveMessage(''), 2400);
     } catch (err) {
       console.error(err);
-      setError('This story was too large for browser storage. Try saving after generating fewer images, or export it as a PDF.');
+      setError('Moonlit could not save this story. Check your connection and Supabase policies, then try again.');
       setSaveMessage('');
     }
   }
@@ -315,8 +541,18 @@ export default function Home() {
   }
 
   async function deleteSavedStory(id) {
-    if (!window.confirm('Remove this story from this browser?')) return;
-    await removeSavedStory(id);
+    if (!window.confirm('Remove this story from your Moonlit shelf?')) return;
+    if (supabaseConfigured) {
+      const prefix = `${user.id}/${id}`;
+      const { data: assets } = await supabase.storage.from('story-assets').list(prefix);
+      if (assets?.length) {
+        await supabase.storage.from('story-assets').remove(assets.map((asset) => `${prefix}/${asset.name}`));
+      }
+      const { error: deleteError } = await supabase.from('stories').delete().eq('id', id);
+      if (deleteError) setError('Moonlit could not delete that story.');
+    } else {
+      await removeSavedStory(id);
+    }
     await refreshLibrary();
   }
 
@@ -332,10 +568,11 @@ export default function Home() {
           <span className="brand-mark">☾</span>
           <span>moonlit</span>
         </a>
-        <div className="header-actions-global"><button type="button" onClick={openLibrary}>My stories</button><div className="header-note">Made for little imaginations</div></div>
+        <div className="header-actions-global"><button type="button" onClick={openLibrary}>My stories</button>{supabaseConfigured ? (user ? <div className="account-chip"><span>{user.email}</span><button type="button" onClick={signOut}>Sign out</button></div> : <button type="button" className="sign-in-button" onClick={() => requestSignIn()}>Sign in</button>) : <div className="header-note">Local preview mode</div>}</div>
       </header>
 
       <section className="shell">
+        {user && localImportCount > 0 && <div className="import-banner"><div><strong>Bring your earlier stories with you.</strong><span>Moonlit found {localImportCount} {localImportCount === 1 ? 'story' : 'stories'} saved in this browser.</span></div><button type="button" onClick={importLocalStories} disabled={importingStories}>{importingStories ? 'Importing…' : 'Add to my account'}</button></div>}
         {step !== 'library' && <div className="progress-row" aria-label="Progress">
           {['Create', 'Review', 'Read'].map((label, index) => (
             <div className={`progress-item ${progress >= index + 1 ? 'active' : ''}`} key={label}>
@@ -370,7 +607,7 @@ export default function Home() {
                 <label>Age<select value={form.age} onChange={(e) => update('age', e.target.value)}>{Array.from({length: 9}, (_, i) => <option key={i+2}>{i+2}</option>)}</select></label>
               </div>
               <div className="field-grid two">
-                <label>Pronouns<select value={form.pronouns} onChange={(e) => update('pronouns', e.target.value)}><option value="use-name">Use child’s name only</option><option value="he/him">He/him</option><option value="she/her">She/her</option><option value="they/them">They/them</option></select></label>
+                <label>Pronouns<select value={form.pronouns} onChange={(e) => update('pronouns', e.target.value)}><option value="use-name">Use child's name only</option><option value="he/him">He/him</option><option value="she/her">She/her</option><option value="they/them">They/them</option></select></label>
                 <label>Appearance <span className="optional">optional</span><input value={form.appearance} onChange={(e) => update('appearance', e.target.value)} placeholder="Curly brown hair, green pajamas" /></label>
               </div>
 
@@ -497,14 +734,14 @@ export default function Home() {
         {step === 'library' && (
           <section className="library-view">
             <div className="library-header">
-              <div><div className="eyebrow">Saved in this browser</div><h1>My Stories</h1><p>Open a story, continue illustrating it, or save a printable copy.</p></div>
+              <div><div className="eyebrow">Your Moonlit shelf</div><h1>My Stories</h1><p>Your books are saved to your account and available wherever you sign in.</p></div>
               <button className="primary-small" onClick={() => { setStory(null); setStoryId(null); setForm(emptyForm); setStep('create'); }}>Create a new story</button>
             </div>
             {error && <div className="error">{error}</div>}
             {libraryLoading ? (
               <div className="library-empty">Opening your story shelf…</div>
             ) : savedStories.length === 0 ? (
-              <div className="library-empty"><span>☾</span><h2>Your shelf is waiting.</h2><p>Save a story after generating it and it will appear here on this browser.</p></div>
+              <div className="library-empty"><span>☾</span><h2>Your shelf is waiting.</h2><p>Save a story after generating it and it will appear here on every device where you sign in.</p></div>
             ) : (
               <div className="library-grid">
                 {savedStories.map((record) => (
@@ -550,6 +787,24 @@ export default function Home() {
             <div className="reader-nav"><button disabled={pageIndex === 0} onClick={() => setPageIndex((i) => i - 1)}>← Previous</button><div className="dots">{story.pages.map((_, i) => <button aria-label={`Page ${i+1}`} key={i} className={i === pageIndex ? 'active' : ''} onClick={() => setPageIndex(i)} />)}</div><button disabled={pageIndex === story.pages.length - 1} onClick={() => setPageIndex((i) => i + 1)}>Next →</button></div>
           </section>
         )}
+
+        {authOpen && <div className="auth-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setAuthOpen(false); }}>
+          <section className="auth-modal" role="dialog" aria-modal="true" aria-label="Moonlit account">
+            <button type="button" className="auth-close" onClick={() => setAuthOpen(false)} aria-label="Close">×</button>
+            <div className="auth-moon">☾</div>
+            <div className="eyebrow">Keep their stories close</div>
+            <h2>{authMode === 'signup' ? 'Create your Moonlit account' : 'Welcome back'}</h2>
+            <p>{authMode === 'signup' ? 'Save books, continue illustrations, and open your family shelf on any device.' : 'Sign in to open your saved stories and continue where you left off.'}</p>
+            <form onSubmit={submitAuth}>
+              <label>Email<input type="email" required autoComplete="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="you@example.com" /></label>
+              <label>Password<input type="password" required minLength="8" autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="At least 8 characters" /></label>
+              {authMessage && <div className="auth-message">{authMessage}</div>}
+              <button className="primary-button" disabled={authLoading}>{authLoading ? 'One moment…' : authMode === 'signup' ? 'Create free account' : 'Sign in'}<span>→</span></button>
+            </form>
+            <button type="button" className="auth-switch" onClick={() => { setAuthMode(authMode === 'signup' ? 'signin' : 'signup'); setAuthMessage(''); }}>{authMode === 'signup' ? 'Already have an account? Sign in' : 'New to Moonlit? Create an account'}</button>
+            <small className="auth-privacy">Use a parent or guardian email. Moonlit only needs a child’s first name or nickname.</small>
+          </section>
+        </div>}
 
         {story && (
           <section className="print-book" aria-hidden="true">

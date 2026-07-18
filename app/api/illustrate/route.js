@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { authenticateRequest } from '../../../lib/supabase-server';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -37,6 +38,10 @@ Composition and safety requirements:
 
 export async function POST(request) {
   try {
+    const auth = await authenticateRequest(request);
+    if (auth.configured && !auth.user) {
+      return NextResponse.json({ error: 'Please sign in to create stories.' }, { status: 401 });
+    }
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: 'OpenAI image generation is not configured yet.' }, { status: 503 });
     }
