@@ -452,7 +452,14 @@ export default function Home() {
               <div className="cover-kicker">Book cover</div>
               <div className="cover-preview">
                 {story.coverImageUrl ? (
-                  <img src={story.coverImageUrl} alt={`Cover artwork for ${story.title}`} />
+                  <>
+                    <img src={story.coverImageUrl} alt={`Cover artwork for ${story.title}`} />
+                    <div className="cover-title-overlay">
+                      <small>A Moonlit Story</small>
+                      <h3>{story.title}</h3>
+                      {story.characterBible?.name && <p>For {story.characterBible.name}</p>}
+                    </div>
+                  </>
                 ) : (
                   <div className="cover-placeholder">
                     <span>Cover direction</span>
@@ -503,7 +510,12 @@ export default function Home() {
                 {savedStories.map((record) => (
                   <article className="library-card" key={record.id}>
                     <button className="library-cover" onClick={() => loadSavedStory(record, 'read')}>
-                      {record.coverImageUrl ? <img src={record.coverImageUrl} alt="" /> : <div><span>☾</span><strong>{record.title}</strong></div>}
+                      {record.coverImageUrl ? (
+                        <>
+                          <img src={record.coverImageUrl} alt="" />
+                          <div className="library-cover-overlay"><small>A Moonlit Story</small><strong>{record.title}</strong></div>
+                        </>
+                      ) : <div><span>☾</span><strong>{record.title}</strong></div>}
                     </button>
                     <div className="library-card-copy"><small>{record.childName ? `For ${record.childName}` : 'Moonlit story'} · {new Date(record.updatedAt).toLocaleDateString()}</small><h2>{record.title}</h2></div>
                     <div className="library-card-actions"><button onClick={() => loadSavedStory(record, 'review')}>Edit</button><button onClick={() => loadSavedStory(record, 'read')}>Read</button><button className="delete-story" onClick={() => deleteSavedStory(record.id)}>Delete</button></div>

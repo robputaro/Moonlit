@@ -22,3 +22,19 @@
   .print-cover-title{position:absolute;z-index:2;left:.65in;right:.65in;bottom:.7in;color:#fff}.print-cover-title small{font-size:10pt;text-transform:uppercase;letter-spacing:.18em}.print-cover-title h1{font-family:'Playfair Display',serif;font-size:42pt;line-height:1;margin:10pt 0}.print-cover-title p{font-size:12pt;line-height:1.5;max-width:6.5in}
   .print-page{display:grid;grid-template-rows:7.2in 1fr;padding:.48in;gap:.28in}.print-image{border-radius:.18in;overflow:hidden;background:#e9e4dc}.print-image img{display:block;width:100%;height:100%;object-fit:cover}.print-placeholder{height:100%;display:grid;place-items:center;color:#817b86;font-size:11pt}.print-copy{display:flex;flex-direction:column;justify-content:center;padding:0 .18in}.print-copy small{text-transform:uppercase;letter-spacing:.12em;color:#70649d;font-size:8pt;font-weight:700}.print-copy p{font-family:'Playfair Display',serif;font-size:20pt;line-height:1.45;color:#35304f;margin:12pt 0 0}
 }
+
+
+/* Live cover-title overlays */
+.cover-preview{position:relative}
+.cover-preview.has-image,.cover-editor.has-image .cover-preview{isolation:isolate}
+.cover-preview img{position:absolute;inset:0;z-index:0}
+.cover-title-overlay{position:absolute;z-index:2;left:0;right:0;bottom:0;padding:58px 20px 20px;color:#fff;background:linear-gradient(transparent,rgba(28,24,48,.9));text-shadow:0 2px 16px rgba(0,0,0,.42)}
+.cover-title-overlay small{display:block;text-transform:uppercase;letter-spacing:.16em;font-size:8px;font-weight:800;opacity:.88}
+.cover-title-overlay h3{font-family:'Playfair Display',serif;font-size:26px;line-height:1.04;margin:8px 0 5px}
+.cover-title-overlay p{margin:0;font-size:10px;font-weight:700;opacity:.9}
+.library-cover{position:relative;isolation:isolate}
+.library-cover>img{position:absolute;inset:0;z-index:0}
+.library-cover-overlay{position:absolute;z-index:2;left:0;right:0;bottom:0;height:auto!important;padding:48px 16px 15px!important;background:linear-gradient(transparent,rgba(28,24,48,.88));color:#fff!important;align-items:flex-start!important;justify-content:flex-end!important}
+.library-cover-overlay small{font-size:7px!important;letter-spacing:.14em!important;color:rgba(255,255,255,.84)!important}
+.library-cover-overlay strong{font-size:19px!important;color:#fff!important;text-shadow:0 2px 12px rgba(0,0,0,.4)}
+@media(max-width:640px){.cover-title-overlay h3{font-size:34px}.cover-title-overlay{padding:80px 24px 24px}}
