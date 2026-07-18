@@ -46,6 +46,57 @@ const imageLoadingMessages = [
   'Finishing the page…'
 ];
 
+
+const LIBRARY_DB = 'moonlit-library';
+const LIBRARY_STORE = 'stories';
+
+function openLibraryDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(LIBRARY_DB, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(LIBRARY_STORE)) {
+        db.createObjectStore(LIBRARY_STORE, { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function putSavedStory(record) {
+  const db = await openLibraryDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(LIBRARY_STORE, 'readwrite');
+    transaction.objectStore(LIBRARY_STORE).put(record);
+    transaction.oncomplete = () => { db.close(); resolve(record); };
+    transaction.onerror = () => { db.close(); reject(transaction.error); };
+  });
+}
+
+async function getSavedStories() {
+  const db = await openLibraryDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(LIBRARY_STORE, 'readonly');
+    const request = transaction.objectStore(LIBRARY_STORE).getAll();
+    request.onsuccess = () => {
+      db.close();
+      resolve((request.result || []).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
+    };
+    request.onerror = () => { db.close(); reject(request.error); };
+  });
+}
+
+async function removeSavedStory(id) {
+  const db = await openLibraryDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(LIBRARY_STORE, 'readwrite');
+    transaction.objectStore(LIBRARY_STORE).delete(id);
+    transaction.oncomplete = () => { db.close(); resolve(); };
+    transaction.onerror = () => { db.close(); reject(transaction.error); };
+  });
+}
+
 const emptyForm = {
   childName: '',
   age: '4',
@@ -74,11 +125,16 @@ export default function Home() {
   const [loadingMessage, setLoadingMessage] = useState('');
   const [imageLoadingMessage, setImageLoadingMessage] = useState({});
   const [coverLoading, setCoverLoading] = useState(false);
+  const [storyId, setStoryId] = useState(null);
+  const [savedStories, setSavedStories] = useState([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
 
   const progress = useMemo(() => {
     if (step === 'create') return 1;
     if (step === 'review') return 2;
-    return 3;
+    if (step === 'read') return 3;
+    return 0;
   }, [step]);
 
   useEffect(() => {
@@ -109,6 +165,7 @@ export default function Home() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Story generation failed.');
       setStory(data);
+      setStoryId(null);
       setStep('review');
       setPageIndex(0);
     } catch (err) {
@@ -203,13 +260,69 @@ export default function Home() {
     }
   }
 
-  function saveLocal() {
-    const textOnlyStory = {
-      ...story,
-      pages: story.pages.map(({ imageUrl, ...page }) => page)
-    };
-    localStorage.setItem('moonlit-latest-story', JSON.stringify(textOnlyStory));
-    alert('Story text saved in this browser. Generated images remain available for this session.');
+  async function refreshLibrary() {
+    setLibraryLoading(true);
+    setError('');
+    try {
+      setSavedStories(await getSavedStories());
+    } catch (err) {
+      setError('Moonlit could not open the story library in this browser.');
+    } finally {
+      setLibraryLoading(false);
+    }
+  }
+
+  async function openLibrary() {
+    setStep('library');
+    await refreshLibrary();
+  }
+
+  async function saveToLibrary() {
+    if (!story) return;
+    setError('');
+    setSaveMessage('Saving…');
+    try {
+      const id = storyId || crypto.randomUUID();
+      const now = new Date().toISOString();
+      await putSavedStory({
+        id,
+        createdAt: story.createdAt || now,
+        updatedAt: now,
+        title: story.title,
+        childName: story.characterBible?.name || form.childName,
+        coverImageUrl: story.coverImageUrl || '',
+        form,
+        story: { ...story, createdAt: story.createdAt || now }
+      });
+      setStoryId(id);
+      setStory((current) => ({ ...current, createdAt: current.createdAt || now }));
+      setSaveMessage('Saved to My Stories');
+      window.setTimeout(() => setSaveMessage(''), 2400);
+    } catch (err) {
+      console.error(err);
+      setError('This story was too large for browser storage. Try saving after generating fewer images, or export it as a PDF.');
+      setSaveMessage('');
+    }
+  }
+
+  function loadSavedStory(record, targetStep = 'review') {
+    setStory(record.story);
+    setForm({ ...emptyForm, ...(record.form || {}) });
+    setStoryId(record.id);
+    setPageIndex(0);
+    setStep(targetStep);
+    setError('');
+  }
+
+  async function deleteSavedStory(id) {
+    if (!window.confirm('Remove this story from this browser?')) return;
+    await removeSavedStory(id);
+    await refreshLibrary();
+  }
+
+  function printStory() {
+    if (!story) return;
+    window.print();
   }
 
   return (
@@ -219,17 +332,17 @@ export default function Home() {
           <span className="brand-mark">☾</span>
           <span>moonlit</span>
         </a>
-        <div className="header-note">Made for little imaginations</div>
+        <div className="header-actions-global"><button type="button" onClick={openLibrary}>My stories</button><div className="header-note">Made for little imaginations</div></div>
       </header>
 
       <section className="shell">
-        <div className="progress-row" aria-label="Progress">
+        {step !== 'library' && <div className="progress-row" aria-label="Progress">
           {['Create', 'Review', 'Read'].map((label, index) => (
             <div className={`progress-item ${progress >= index + 1 ? 'active' : ''}`} key={label}>
               <span>{index + 1}</span>{label}
             </div>
           ))}
-        </div>
+        </div>}
 
         {step === 'create' && (
           <div className="create-grid">
@@ -370,13 +483,40 @@ export default function Home() {
                 </article>
               ))}
             </div>
-            <div className="sticky-actions"><button className="ghost" onClick={saveLocal}>Save draft</button><button className="primary-small" onClick={() => setStep('read')}>Read the story →</button></div>
+            <div className="sticky-actions"><span className="save-status">{saveMessage}</span><button className="ghost" onClick={saveToLibrary}>Save to My Stories</button><button className="ghost" onClick={printStory}>Print / Save PDF</button><button className="primary-small" onClick={() => setStep('read')}>Read the story →</button></div>
+          </section>
+        )}
+
+        {step === 'library' && (
+          <section className="library-view">
+            <div className="library-header">
+              <div><div className="eyebrow">Saved in this browser</div><h1>My Stories</h1><p>Open a story, continue illustrating it, or save a printable copy.</p></div>
+              <button className="primary-small" onClick={() => { setStory(null); setStoryId(null); setForm(emptyForm); setStep('create'); }}>Create a new story</button>
+            </div>
+            {error && <div className="error">{error}</div>}
+            {libraryLoading ? (
+              <div className="library-empty">Opening your story shelf…</div>
+            ) : savedStories.length === 0 ? (
+              <div className="library-empty"><span>☾</span><h2>Your shelf is waiting.</h2><p>Save a story after generating it and it will appear here on this browser.</p></div>
+            ) : (
+              <div className="library-grid">
+                {savedStories.map((record) => (
+                  <article className="library-card" key={record.id}>
+                    <button className="library-cover" onClick={() => loadSavedStory(record, 'read')}>
+                      {record.coverImageUrl ? <img src={record.coverImageUrl} alt="" /> : <div><span>☾</span><strong>{record.title}</strong></div>}
+                    </button>
+                    <div className="library-card-copy"><small>{record.childName ? `For ${record.childName}` : 'Moonlit story'} · {new Date(record.updatedAt).toLocaleDateString()}</small><h2>{record.title}</h2></div>
+                    <div className="library-card-actions"><button onClick={() => loadSavedStory(record, 'review')}>Edit</button><button onClick={() => loadSavedStory(record, 'read')}>Read</button><button className="delete-story" onClick={() => deleteSavedStory(record.id)}>Delete</button></div>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
         {step === 'read' && story && (
           <section className="reader-wrap">
-            <div className="reader-toolbar"><button onClick={() => setStep('review')}>← Back to edit</button><span>{pageIndex + 1} / {story.pages.length}</span><button onClick={saveLocal}>Save</button></div>
+            <div className="reader-toolbar"><button onClick={() => setStep('review')}>← Back to edit</button><span>{pageIndex + 1} / {story.pages.length}</span><div><button onClick={saveToLibrary}>Save</button><button onClick={printStory}>PDF</button></div></div>
             {story.coverImageUrl && (
               <div className="reader-cover-strip">
                 <img src={story.coverImageUrl} alt={`Cover of ${story.title}`} />
@@ -396,6 +536,21 @@ export default function Home() {
               </div>
             </div>
             <div className="reader-nav"><button disabled={pageIndex === 0} onClick={() => setPageIndex((i) => i - 1)}>← Previous</button><div className="dots">{story.pages.map((_, i) => <button aria-label={`Page ${i+1}`} key={i} className={i === pageIndex ? 'active' : ''} onClick={() => setPageIndex(i)} />)}</div><button disabled={pageIndex === story.pages.length - 1} onClick={() => setPageIndex((i) => i + 1)}>Next →</button></div>
+          </section>
+        )}
+
+        {story && (
+          <section className="print-book" aria-hidden="true">
+            <article className="print-cover">
+              {story.coverImageUrl && <img src={story.coverImageUrl} alt="" />}
+              <div className="print-cover-title"><small>A Moonlit Story</small><h1>{story.title}</h1><p>{story.summary}</p></div>
+            </article>
+            {story.pages.map((page, index) => (
+              <article className="print-page" key={`print-${page.pageNumber}`}>
+                <div className="print-image">{page.imageUrl ? <img src={page.imageUrl} alt="" /> : <div className="print-placeholder">Illustration not generated</div>}</div>
+                <div className="print-copy"><small>{story.title} · {index + 1}</small><p>{page.text}</p></div>
+              </article>
+            ))}
           </section>
         )}
       </section>
