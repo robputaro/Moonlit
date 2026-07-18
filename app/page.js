@@ -218,6 +218,25 @@ export default function Home() {
     }
   }
 
+  async function signInWithGoogle() {
+    if (!supabaseConfigured) return;
+    setAuthLoading(true);
+    setAuthMessage('');
+    try {
+      const { error: googleError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+          queryParams: { prompt: 'select_account' }
+        }
+      });
+      if (googleError) throw googleError;
+    } catch (err) {
+      setAuthMessage(err.message || 'Moonlit could not start Google sign-in.');
+      setAuthLoading(false);
+    }
+  }
+
   async function signOut() {
     if (supabase) await supabase.auth.signOut();
     setSession(null);
@@ -795,6 +814,11 @@ export default function Home() {
             <div className="eyebrow">Keep their stories close</div>
             <h2>{authMode === 'signup' ? 'Create your Moonlit account' : 'Welcome back'}</h2>
             <p>{authMode === 'signup' ? 'Save books, continue illustrations, and open your family shelf on any device.' : 'Sign in to open your saved stories and continue where you left off.'}</p>
+            <button type="button" className="google-auth-button" onClick={signInWithGoogle} disabled={authLoading}>
+              <span className="google-mark" aria-hidden="true">G</span>
+              Continue with Google
+            </button>
+            <div className="auth-divider"><span>or continue with email</span></div>
             <form onSubmit={submitAuth}>
               <label>Email<input type="email" required autoComplete="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="you@example.com" /></label>
               <label>Password<input type="password" required minLength="8" autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="At least 8 characters" /></label>
