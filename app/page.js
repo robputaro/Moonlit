@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const challenges = [
   ['Giving up the pacifier', 'A gentle goodbye to a familiar comfort'],
@@ -32,6 +32,20 @@ const styles = [
   ['Paper Cutout', 'Textured and whimsical']
 ];
 
+const storyLoadingMessages = [
+  'Learning about your child…',
+  'Shaping the challenge gently…',
+  'Writing the story arc…',
+  'Preparing each page…',
+  'Almost ready…'
+];
+
+const imageLoadingMessages = [
+  'Sketching the scene…',
+  'Painting the details…',
+  'Finishing the page…'
+];
+
 const emptyForm = {
   childName: '',
   age: '4',
@@ -55,12 +69,28 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [pageIndex, setPageIndex] = useState(0);
+  const [imageLoading, setImageLoading] = useState({});
+  const [generatingAll, setGeneratingAll] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
+  const [imageLoadingMessage, setImageLoadingMessage] = useState({});
+  const [coverLoading, setCoverLoading] = useState(false);
 
   const progress = useMemo(() => {
     if (step === 'create') return 1;
     if (step === 'review') return 2;
     return 3;
   }, [step]);
+
+  useEffect(() => {
+    if (!loading) return undefined;
+    let index = 0;
+    setLoadingMessage(storyLoadingMessages[0]);
+    const interval = setInterval(() => {
+      index = Math.min(index + 1, storyLoadingMessages.length - 1);
+      setLoadingMessage(storyLoadingMessages[index]);
+    }, 2200);
+    return () => clearInterval(interval);
+  }, [loading]);
 
   function update(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -85,6 +115,7 @@ export default function Home() {
       setError(err.message);
     } finally {
       setLoading(false);
+      setLoadingMessage('');
     }
   }
 
@@ -95,9 +126,90 @@ export default function Home() {
     }));
   }
 
+  async function generateImageForPage(index) {
+    const page = story?.pages?.[index];
+    if (!page || imageLoading[index]) return;
+
+    setImageLoading((current) => ({ ...current, [index]: true }));
+    setImageLoadingMessage((current) => ({ ...current, [index]: imageLoadingMessages[0] }));
+    setError('');
+    let messageIndex = 0;
+    const messageTimer = setInterval(() => {
+      messageIndex = Math.min(messageIndex + 1, imageLoadingMessages.length - 1);
+      setImageLoadingMessage((current) => ({ ...current, [index]: imageLoadingMessages[messageIndex] }));
+    }, 4500);
+    try {
+      const response = await fetch('/api/illustrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storyTitle: story.title,
+          style: form.style,
+          characterBible: story.characterBible,
+          page
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Image generation failed.');
+      setStory((current) => ({
+        ...current,
+        pages: current.pages.map((item, i) => i === index ? { ...item, imageUrl: data.imageUrl } : item)
+      }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      clearInterval(messageTimer);
+      setImageLoading((current) => ({ ...current, [index]: false }));
+      setImageLoadingMessage((current) => ({ ...current, [index]: '' }));
+    }
+  }
+
+  async function generateCover() {
+    if (!story || coverLoading) return;
+    setCoverLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/api/illustrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind: 'cover',
+          storyTitle: story.title,
+          style: form.style,
+          characterBible: story.characterBible,
+          page: { coverPrompt: story.coverPrompt || story.pages?.[0]?.illustrationPrompt }
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Cover generation failed.');
+      setStory((current) => ({ ...current, coverImageUrl: data.imageUrl }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCoverLoading(false);
+    }
+  }
+
+  async function generateAllImages() {
+    if (!story?.pages?.length || generatingAll) return;
+    setGeneratingAll(true);
+    setError('');
+    try {
+      for (let i = 0; i < story.pages.length; i += 1) {
+        if (!story.pages[i].imageUrl) await generateImageForPage(i);
+      }
+    } finally {
+      setGeneratingAll(false);
+    }
+  }
+
   function saveLocal() {
-    localStorage.setItem('moonlit-latest-story', JSON.stringify(story));
-    alert('Story saved in this browser.');
+    const textOnlyStory = {
+      ...story,
+      pages: story.pages.map(({ imageUrl, ...page }) => page)
+    };
+    localStorage.setItem('moonlit-latest-story', JSON.stringify(textOnlyStory));
+    alert('Story text saved in this browser. Generated images remain available for this session.');
   }
 
   return (
@@ -204,7 +316,7 @@ export default function Home() {
               </div>
 
               {error && <div className="error">{error}</div>}
-              <button className="primary-button" disabled={loading}>{loading ? 'Writing your story…' : form.storyMode === 'Challenge' ? 'Create their challenge story' : 'Create my story'}<span>→</span></button>
+              <button className="primary-button" disabled={loading}>{loading ? loadingMessage || 'Writing your story…' : form.storyMode === 'Challenge' ? 'Create their challenge story' : 'Create my story'}<span>→</span></button>
               <p className="privacy-note">Use a first name or nickname. Moonlit does not need private information about your child.</p>
             </form>
           </div>
@@ -214,18 +326,46 @@ export default function Home() {
           <section className="review-layout">
             <div className="review-header">
               <div><div className="eyebrow">Your story draft</div><h1>{story.title}</h1><p>{story.summary}</p></div>
-              <div className="header-actions"><button className="ghost" onClick={() => setStep('create')}>Edit setup</button><button className="primary-small" onClick={() => setStep('read')}>Open storybook →</button></div>
+              <div className="header-actions"><button className="ghost" onClick={() => setStep('create')}>Edit setup</button><button className="ghost" onClick={generateCover} disabled={coverLoading}>{coverLoading ? 'Creating cover…' : story.coverImageUrl ? 'Regenerate cover' : 'Generate cover'}</button><button className="ghost" onClick={generateAllImages} disabled={generatingAll}>{generatingAll ? 'Illustrating pages…' : 'Generate all images'}</button><button className="primary-small" onClick={() => setStep('read')}>Open storybook →</button></div>
             </div>
             <div className="story-meta">
               <div><small>Starring</small><strong>{story.characterBible?.name}</strong></div>
               <div><small>Visual style</small><strong>{form.style}</strong></div>
               <div><small>Gentle takeaway</small><strong>{story.takeaway}</strong></div>
             </div>
+            {error && <div className="error review-error">{error}</div>}
+            <div className="image-note"><strong>Illustrations are generated separately.</strong> Create one page at a time, or generate the whole book after you approve the writing. Each image uses OpenAI API credits.</div>
+            <article className={`cover-editor ${story.coverImageUrl ? 'has-image' : ''}`}>
+              <div className="cover-kicker">Book cover</div>
+              <div className="cover-preview">
+                {story.coverImageUrl ? (
+                  <img src={story.coverImageUrl} alt={`Cover artwork for ${story.title}`} />
+                ) : (
+                  <div className="cover-placeholder">
+                    <span>Cover direction</span>
+                    <h3>{story.title}</h3>
+                    <p>{story.coverPrompt || 'A warm portrait cover featuring the child and the story’s central magical moment.'}</p>
+                  </div>
+                )}
+              </div>
+              <button type="button" className="image-button cover-button" onClick={generateCover} disabled={coverLoading}>
+                {coverLoading ? 'Creating cover…' : story.coverImageUrl ? 'Regenerate cover' : 'Generate cover'}
+              </button>
+            </article>
             <div className="page-editor-list">
               {story.pages.map((page, index) => (
                 <article className="page-editor" key={page.pageNumber}>
                   <div className="page-number">{String(index + 1).padStart(2, '0')}</div>
-                  <div className="illustration-placeholder"><span>Illustration direction</span><p>{page.illustrationPrompt}</p></div>
+                  <div className={`illustration-placeholder ${page.imageUrl ? 'has-image' : ''}`}>
+                    {page.imageUrl ? (
+                      <img src={page.imageUrl} alt={`Illustration for page ${page.pageNumber}`} />
+                    ) : (
+                      <div className="illustration-copy"><span>Illustration direction</span><p>{page.illustrationPrompt}</p></div>
+                    )}
+                    <button type="button" className="image-button" onClick={() => generateImageForPage(index)} disabled={imageLoading[index] || generatingAll}>
+                      {imageLoading[index] ? imageLoadingMessage[index] || 'Creating illustration…' : page.imageUrl ? 'Regenerate image' : 'Generate image'}
+                    </button>
+                  </div>
                   <div className="page-copy"><label>Page text</label><textarea value={page.text} onChange={(e) => updatePage(index, e.target.value)} /></div>
                 </article>
               ))}
@@ -237,11 +377,20 @@ export default function Home() {
         {step === 'read' && story && (
           <section className="reader-wrap">
             <div className="reader-toolbar"><button onClick={() => setStep('review')}>← Back to edit</button><span>{pageIndex + 1} / {story.pages.length}</span><button onClick={saveLocal}>Save</button></div>
+            {story.coverImageUrl && (
+              <div className="reader-cover-strip">
+                <img src={story.coverImageUrl} alt={`Cover of ${story.title}`} />
+                <div><small>Cover</small><strong>{story.title}</strong></div>
+              </div>
+            )}
             <div className="book-stage">
               <div className="book-page">
-                <div className="reader-art">
-                  <div className="reader-moon">☾</div><div className="reader-stars">✦ &nbsp; · &nbsp; ✧</div>
-                  <div className="prompt-caption">{story.pages[pageIndex].illustrationPrompt}</div>
+                <div className={`reader-art ${story.pages[pageIndex].imageUrl ? 'has-image' : ''}`}>
+                  {story.pages[pageIndex].imageUrl ? (
+                    <img src={story.pages[pageIndex].imageUrl} alt={`Illustration for page ${pageIndex + 1}`} />
+                  ) : (
+                    <><div className="reader-moon">☾</div><div className="reader-stars">✦ &nbsp; · &nbsp; ✧</div><div className="prompt-caption">Generate this page's illustration from the review screen.</div></>
+                  )}
                 </div>
                 <div className="reader-copy"><div className="tiny-title">{story.title}</div><p>{story.pages[pageIndex].text}</p></div>
               </div>

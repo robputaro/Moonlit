@@ -50,3 +50,7 @@ OPENAI_MODEL=gpt-4.1-mini
 ## Current limitation
 
 This version creates illustration prompts but does not yet call an image-generation API. That is the intended next layer after the story-writing flow is approved.
+
+## Reliability + Cover Update
+
+This build adds automatic retry and safer JSON parsing for story generation, rotating progress messages, stronger character continuity instructions for page art, and optional generated cover artwork.
