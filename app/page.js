@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase, supabaseConfigured } from '../lib/supabase-browser';
+import SiteFooter from './components/SiteFooter';
 
 const challenges = [
   ['Giving up the pacifier', 'A gentle goodbye to a familiar comfort'],
@@ -1637,6 +1638,7 @@ export default function Home() {
           </section>
         )}
       </section>
+      <SiteFooter />
     </main>
   );
 }

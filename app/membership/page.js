@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import SiteFooter from '../components/SiteFooter';
 
 export default function MembershipPage() {
   return (
@@ -34,6 +35,7 @@ export default function MembershipPage() {
           <article><span>Ami Studio</span><strong>From $79</strong><p>Human-created and reviewed premium keepsakes.</p></article>
         </section>
       </div>
+      <SiteFooter />
     </main>
   );
 }
