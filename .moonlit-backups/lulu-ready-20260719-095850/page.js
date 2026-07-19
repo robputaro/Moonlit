@@ -208,7 +208,7 @@ export default function Home() {
   const [theme, setTheme] = useState('light');
   const [keepsakeExporting, setKeepsakeExporting] = useState(false);
   const [coverExporting, setCoverExporting] = useState(false);
-  const [coverSpec, setCoverSpec] = useState({ totalWidth: '19.00', totalHeight: '10.25', spineWidth: '0.25' });
+  const [coverSpec, setCoverSpec] = useState({ totalWidth: '18.00', totalHeight: '9.75', spineWidth: '0.25' });
   const [backCoverBlurb, setBackCoverBlurb] = useState('');
 
   const progress = useMemo(() => {
@@ -865,9 +865,9 @@ export default function Home() {
 
     try {
       const { jsPDF } = await import('jspdf');
-      const PAGE = 630; // 8.75 inches at 72 pt/in: 8.5x8.5 trim plus 0.125in bleed on every edge.
+      const PAGE = 594; // 8.25 inches at 72 pt/in: 8x8 trim plus 0.125in bleed on every edge.
       const TRIM_INSET = 9;
-      const SAFE = 48;
+      const SAFE = 42;
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: [PAGE, PAGE], compress: true });
 
       const fetchDataUrl = async (url) => {
@@ -1074,10 +1074,10 @@ export default function Home() {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '') || 'moonlit-story';
-      pdf.save(`${safeName}-8-5x8-5-lulu-interior.pdf`);
+      pdf.save(`${safeName}-8x8-keepsake-interior.pdf`);
     } catch (pdfError) {
       console.error(pdfError);
-      setError(`We could not create the 8.5×8.5 Lulu interior PDF: ${pdfError.message || 'Unknown error'}`);
+      setError(`We could not create the 8×8 keepsake PDF: ${pdfError.message || 'Unknown error'}`);
     } finally {
       setKeepsakeExporting(false);
     }
@@ -1102,8 +1102,8 @@ export default function Home() {
       const H = totalHeightIn * 72;
       const SPINE = spineWidthIn * 72;
       const PANEL = (W - SPINE) / 2;
-      const WRAP_SAFE = 45; // 0.625 in
-      const HINGE_SAFE = 18;
+      const WRAP_SAFE = 54;
+      const HINGE_SAFE = 24;
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: [W, H], compress: true });
 
       const fetchDataUrl = async (url) => {
@@ -1183,8 +1183,8 @@ export default function Home() {
       pdf.text('MADE WITH MOONLIT', backX, H * 0.73);
       pdf.setCharSpace(0);
 
-      const barcodeW = 260.784; // 3.622 in
-      const barcodeH = 90.72; // 1.26 in
+      const barcodeW = 144;
+      const barcodeH = 86;
       const barcodeX = PANEL - WRAP_SAFE - barcodeW;
       const barcodeY = H - WRAP_SAFE - barcodeH;
       pdf.setFillColor(255, 255, 255);
@@ -1205,10 +1205,10 @@ export default function Home() {
 
       const safeName = String(decodeHtmlEntities(story.title || 'moonlit-story'))
         .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'moonlit-story';
-      pdf.save(`${safeName}-lulu-casewrap-cover-${totalWidthIn}x${totalHeightIn}.pdf`);
+      pdf.save(`${safeName}-wraparound-cover-${totalWidthIn}x${totalHeightIn}.pdf`);
     } catch (coverError) {
       console.error(coverError);
-      setError(`We could not create the Lulu casewrap cover PDF: ${coverError.message || 'Unknown error'}`);
+      setError(`We could not create the wraparound cover PDF: ${coverError.message || 'Unknown error'}`);
     } finally {
       setCoverExporting(false);
     }
@@ -1387,7 +1387,7 @@ export default function Home() {
             </div>
             <aside className="print-production-panel">
               <div className="print-production-heading">
-                <div><span className="print-readiness-kicker">Print review</span><strong>{story.coverImageUrl && story.pages.every((page) => page.imageUrl) ? 'Ready to prepare a physical proof' : 'Complete the artwork before ordering'}</strong><p>Interior: 8.5 × 8.5 in trim with bleed. Cover: Lulu casewrap spread, 19 × 10.25 in with a 0.25 in spine.</p></div>
+                <div><span className="print-readiness-kicker">Print review</span><strong>{story.coverImageUrl && story.pages.every((page) => page.imageUrl) ? 'Ready to prepare a physical proof' : 'Complete the artwork before ordering'}</strong><p>Interior: 8×8 trim with bleed. Cover: one-piece back, spine, and front spread.</p></div>
                 <div className={`production-score ${story.coverImageUrl && story.pages.every((page) => page.imageUrl) ? 'ready' : ''}`}>{story.pages.filter((page) => page.imageUrl).length + (story.coverImageUrl ? 1 : 0)}/{story.pages.length + 1}</div>
               </div>
               <div className="print-production-grid">
@@ -1402,23 +1402,23 @@ export default function Home() {
                   </ul>
                 </div>
                 <div className="cover-settings">
-                  <h3>Lulu cover template</h3>
-                  <p>These defaults match your current Lulu 24-page, 8.5 × 8.5 casewrap template. Update them only if Lulu gives you a different custom cover template.</p>
+                  <h3>Printer cover template</h3>
+                  <p>Upload the interior first, then copy the exact total dimensions from the printer’s custom cover template.</p>
                   <div className="cover-dimension-row">
                     <label>Total width (in)<input type="number" min="1" step="0.001" value={coverSpec.totalWidth} onChange={(e) => setCoverSpec((current) => ({ ...current, totalWidth: e.target.value }))} /></label>
                     <label>Total height (in)<input type="number" min="1" step="0.001" value={coverSpec.totalHeight} onChange={(e) => setCoverSpec((current) => ({ ...current, totalHeight: e.target.value }))} /></label>
                     <label>Spine width (in)<input type="number" min="0" step="0.001" value={coverSpec.spineWidth} onChange={(e) => setCoverSpec((current) => ({ ...current, spineWidth: e.target.value }))} /></label>
                   </div>
                   <label className="back-blurb-field">Back-cover blurb<textarea value={backCoverBlurb} onChange={(e) => setBackCoverBlurb(e.target.value)} maxLength={650} /></label>
-                  <small>Current template: 19 × 10.25 in total size, 0.25 in spine, 3.622 × 1.26 in barcode area, and 0.625 in wrap / safety margins.</small>
+                  <small>The defaults are a design proof only. The final upload must use the exact custom template dimensions generated after the interior is uploaded.</small>
                 </div>
               </div>
               <div className="print-export-actions">
-                <button type="button" className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building Lulu interior…' : 'Download Lulu interior PDF'}</button>
-                <button type="button" className="ghost keepsake-button" onClick={exportWraparoundCoverPdf} disabled={coverExporting || !story.coverImageUrl}>{coverExporting ? 'Building Lulu cover…' : 'Download Lulu cover PDF'}</button>
+                <button type="button" className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building interior…' : 'Download interior PDF'}</button>
+                <button type="button" className="ghost keepsake-button" onClick={exportWraparoundCoverPdf} disabled={coverExporting || !story.coverImageUrl}>{coverExporting ? 'Building cover…' : 'Download wraparound cover PDF'}</button>
               </div>
             </aside>
-            <div className="sticky-actions"><span className="save-status">{saveMessage}</span><button className="ghost" onClick={saveToLibrary}>Save to My Stories</button><button className="ghost" onClick={printStory}>Digital PDF</button><button className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building 8.5×8.5…' : '8.5×8.5 Lulu PDF'}</button><button className="primary-small" onClick={() => setStep('read')}>Read the story →</button></div>
+            <div className="sticky-actions"><span className="save-status">{saveMessage}</span><button className="ghost" onClick={saveToLibrary}>Save to My Stories</button><button className="ghost" onClick={printStory}>Digital PDF</button><button className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building 8×8…' : '8×8 Keepsake PDF'}</button><button className="primary-small" onClick={() => setStep('read')}>Read the story →</button></div>
           </section>
         )}
 
