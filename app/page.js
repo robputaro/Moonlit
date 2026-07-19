@@ -109,6 +109,8 @@ const emptyForm = {
   age: '4',
   pronouns: 'use-name',
   appearance: '',
+  language: 'en',
+  dedication: '',
   storyMode: 'Challenge',
   challenge: 'Giving up the pacifier',
   emotionalOutcome: 'Brave',
@@ -421,7 +423,7 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Story generation failed.');
-      setStory(data);
+      setStory({ ...data, language: generationInput.language || 'en', dedication: generationInput.dedication || '' });
       setStoryId(null);
       setStep('review');
       setPageIndex(0);
@@ -709,6 +711,28 @@ export default function Home() {
         pdf.text(summaryLines.slice(0, 4), SAFE + 8, Math.min(titleBottom + 10, 742), { lineHeightFactor: 1.35 });
       }
 
+      const dedication = story.dedication || form.dedication;
+      if (dedication) {
+        pdf.addPage('letter', 'portrait');
+        pdf.setFillColor(255, 252, 246);
+        pdf.rect(0, 0, PAGE_W, PAGE_H, 'F');
+        pdf.setTextColor(111, 97, 170);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setCharSpace(1.4);
+        pdf.text('CREATED ESPECIALLY FOR YOU', PAGE_W / 2, 300, { align: 'center' });
+        pdf.setCharSpace(0);
+        pdf.setTextColor(48, 41, 70);
+        pdf.setFont('times', 'italic');
+        pdf.setFontSize(20);
+        const dedicationLines = pdf.splitTextToSize(dedication, PAGE_W - 150);
+        pdf.text(dedicationLines.slice(0, 8), PAGE_W / 2, 350, { align: 'center', lineHeightFactor: 1.45 });
+        pdf.setTextColor(111, 97, 170);
+        pdf.setFont('times', 'normal');
+        pdf.setFontSize(26);
+        pdf.text('☾', PAGE_W / 2, 505, { align: 'center' });
+      }
+
       // Interior pages: one explicit PDF page each — no browser pagination involved.
       for (let index = 0; index < story.pages.length; index += 1) {
         const page = story.pages[index];
@@ -817,6 +841,11 @@ export default function Home() {
                 <label>Pronouns<select value={form.pronouns} onChange={(e) => update('pronouns', e.target.value)}><option value="use-name">Use child's name only</option><option value="he/him">He/him</option><option value="she/her">She/her</option><option value="they/them">They/them</option></select></label>
                 <label>Appearance <span className="optional">optional</span><input value={form.appearance} onChange={(e) => update('appearance', e.target.value)} placeholder="Curly brown hair, green pajamas" /></label>
               </div>
+              <div className="field-grid two language-fields">
+                <label>Book language<select value={form.language} onChange={(e) => update('language', e.target.value)}><option value="en">English</option><option value="es">Español</option><option value="en-es">English + Español</option></select></label>
+                <label>Dedication <span className="optional">optional</span><input value={form.dedication} onChange={(e) => update('dedication', e.target.value)} placeholder="For August, with all our love — Grandma and Grandpa" /></label>
+              </div>
+              {form.language === 'en-es' && <div className="language-note">Bilingual pages use shorter copy with English first and natural Spanish beneath it.</div>}
 
               <div className="divider"></div>
               <div className="section-heading"><span>2</span><div><h2>What is your child working through?</h2><p>Choose a real moment, or switch to a story made purely for fun.</p></div></div>

@@ -34,6 +34,8 @@ function demoStory(input) {
       lockedWardrobe: wardrobe,
       visualAnchor: 'same face, hair, age, proportions, clothing, and color palette on every page'
     },
+    language: input.language || 'en',
+    dedication: input.dedication || '',
     pages
   };
 }
@@ -41,6 +43,12 @@ function demoStory(input) {
 function pronounInstruction(value) {
   if (value === 'use-name') return "Use the child's name instead of pronouns whenever practical.";
   return `Use ${value || 'they/them'} pronouns.`;
+}
+
+function languageInstruction(value) {
+  if (value === 'es') return `Write every reader-visible field in natural, age-appropriate Spanish. This includes title, summary, takeaway, and every page text. Do not include English translations. Illustration prompts must remain in English.`;
+  if (value === 'en-es') return `Create a genuinely bilingual English-Spanish book. For title, summary, and takeaway, provide English first, then Spanish separated by " / ". For every page text, write a concise English paragraph followed by a blank line and then a natural Spanish rendering prefixed "Español: ". Do not translate word-for-word when a more natural child-friendly Spanish phrase works better. Keep illustration prompts entirely in English.`;
+  return `Write every reader-visible field in natural, age-appropriate English. Illustration prompts must also be in English.`;
 }
 
 function buildPrompt(input) {
@@ -63,6 +71,9 @@ Do not mention, imply, reuse, or resolve any childhood challenge, milestone, pac
 Child: ${input.childName}
 ${pronounInstruction(input.pronouns)}
 Appearance: ${input.appearance || 'not specified'}
+Book language: ${input.language || 'en'}
+${languageInstruction(input.language)}
+Dedication supplied by the family: ${input.dedication || 'none'}
 ${modeContext}
 Favorite elements: ${input.favorites || 'none specified'}
 Optional lesson or value: ${input.lesson || 'a gentle positive emotional resolution'}
@@ -71,7 +82,8 @@ Page count: ${input.length}
 
 Requirements:
 - Exactly ${input.length} pages.
-- 25-55 words per page.
+- For English-only or Spanish-only books, use 25-55 words per page.
+- For bilingual books, keep each language concise: approximately 18-35 words per language per page, while preserving the complete story arc.
 - A clear beginning, escalation, emotional turning point, and comforting resolution.
 - Do not make the child feel bad, behind, babyish, or responsible for adult emotions.
 - Never shame or frighten the child.
@@ -174,6 +186,8 @@ export async function POST(request) {
     else if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) story = await generateWithRetry(claudeStory, input);
     else story = demoStory(input);
 
+    story.language = input.language || 'en';
+    story.dedication = input.dedication || '';
     return NextResponse.json(story);
   } catch (error) {
     console.error('Story route failed:', error);
