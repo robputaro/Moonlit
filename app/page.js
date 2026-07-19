@@ -1271,20 +1271,32 @@ export default function Home() {
 
               <div className="divider"></div>
               <div className="section-heading"><span>2</span><div><h2>What is your child working through?</h2><p>Choose a real moment, or switch to a story made purely for fun.</p></div></div>
-              <div className="mode-toggle">
+              <div className="mode-toggle desktop-story-mode">
                 <button type="button" className={form.storyMode === 'Challenge' ? 'active' : ''} onClick={() => selectStoryMode('Challenge')}>Challenge story</button>
                 <button type="button" className={form.storyMode === 'Fun' ? 'active' : ''} onClick={() => selectStoryMode('Fun')}>Just for fun</button>
               </div>
+              <label className="mobile-story-selector">Story type
+                <select value={form.storyMode} onChange={(e) => selectStoryMode(e.target.value)}>
+                  <option value="Challenge">Challenge story</option>
+                  <option value="Fun">Just for fun</option>
+                </select>
+              </label>
 
               {form.storyMode === 'Challenge' ? (
                 <>
-                  <div className="challenge-grid">
+                  <div className="challenge-grid desktop-story-options">
                     {challenges.map(([name, description]) => (
                       <button type="button" key={name} className={`choice ${form.challenge === name ? 'selected' : ''}`} onClick={() => update('challenge', name)}>
                         <strong>{name}</strong><small>{description}</small>
                       </button>
                     ))}
                   </div>
+                  <label className="mobile-story-selector">What is your child working through?
+                    <select value={form.challenge} onChange={(e) => update('challenge', e.target.value)}>
+                      {challenges.map(([name]) => <option value={name} key={name}>{name}</option>)}
+                    </select>
+                    <small>{challenges.find(([name]) => name === form.challenge)?.[1]}</small>
+                  </label>
                   <label>What is happening right now? <span className="optional">optional but helpful</span><textarea value={form.storyIdea} onChange={(e) => update('storyIdea', e.target.value)} placeholder="She asks for the pacifier whenever she is tired and gets upset when we say no. We want the story to feel reassuring, not like she is in trouble." /></label>
                   <label>How would you like them to feel by the end?</label>
                   <div className="feeling-row">
@@ -1293,13 +1305,19 @@ export default function Home() {
                 </>
               ) : (
                 <>
-                  <div className="choice-grid">
+                  <div className="choice-grid desktop-story-options">
                     {funModes.map(([name, description]) => (
                       <button type="button" key={name} className={`choice ${form.theme === name ? 'selected' : ''}`} onClick={() => update('theme', name)}>
                         <strong>{name}</strong><small>{description}</small>
                       </button>
                     ))}
                   </div>
+                  <label className="mobile-story-selector">What kind of story should this be?
+                    <select value={form.theme} onChange={(e) => update('theme', e.target.value)}>
+                      {funModes.map(([name]) => <option value={name} key={name}>{name}</option>)}
+                    </select>
+                    <small>{funModes.find(([name]) => name === form.theme)?.[1]}</small>
+                  </label>
                   <label>What should happen?<textarea value={form.storyIdea} onChange={(e) => update('storyIdea', e.target.value)} placeholder="August discovers a tiny dinosaur egg in the backyard and has to help the baby find its family..." /></label>
                 </>
               )}
