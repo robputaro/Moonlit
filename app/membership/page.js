@@ -5,7 +5,7 @@ export default function MembershipPage() {
     <main className="platform-page membership-page">
       <div className="platform-shell membership-shell">
         <header className="membership-hero">
-          <Link href="/" className="membership-back">← Moonlit</Link>
+          <Link href="/" className="membership-back">← Stories by Ami</Link>
           <span className="platform-kicker">Stories for the moments you are living now</span>
           <h1>Two new personalized stories every month.</h1>
           <p>Create one for a real-life moment and one purely for fun. Save every story, read it anywhere, and turn your favorites into printed keepsakes.</p>
@@ -13,7 +13,7 @@ export default function MembershipPage() {
 
         <section className="membership-card">
           <div className="membership-price"><span>$</span><strong>9.99</strong><small>/ month</small></div>
-          <h2>Moonlit Membership</h2>
+          <h2>Ami Membership</h2>
           <ul>
             <li>2 digital story credits each month</li>
             <li>English, Spanish, or bilingual books</li>
@@ -31,7 +31,7 @@ export default function MembershipPage() {
         <section className="membership-compare">
           <article><span>One-time digital story</span><strong>$12.99</strong><p>A complete personalized story without a subscription.</p></article>
           <article><span>Member hardcover</span><strong>$34.99</strong><p>Standard hardcover member price, plus shipping.</p></article>
-          <article><span>Moonlit Studio</span><strong>From $79</strong><p>Human-created and reviewed premium keepsakes.</p></article>
+          <article><span>Ami Studio</span><strong>From $79</strong><p>Human-created and reviewed premium keepsakes.</p></article>
         </section>
       </div>
     </main>

@@ -24,7 +24,7 @@ function demoStory(input) {
     illustrationPrompt: `${input.style || 'Watercolor'} children's book illustration of ${name}, ${appearance}, wearing ${wardrobe}, ${index < 2 ? 'discovering a tiny glowing dinosaur egg in a magical backyard' : index < count - 2 ? 'traveling with a tiny friendly dinosaur through a whimsical fern forest' : 'reuniting the baby dinosaur with its gentle family beneath a moonlit sky'}. Warm, safe, expressive, consistent character design, no text in image.`
   }));
   return {
-    title: `${name} and the Moonlit Dinosaur Egg`,
+    title: `${name} and the Glowing Dinosaur Egg`,
     summary: `A gentle ${input.theme?.toLowerCase() || 'adventure'} about helping a lost baby dinosaur find its family.`,
     takeaway: input.lesson || 'Being brave can mean taking one careful step and asking for help.',
     coverPrompt: `${input.style || 'Watercolor'} children’s picture-book cover illustration of ${name}, ${appearance}, wearing ${wardrobe}, holding a softly glowing dinosaur egg beneath a moonlit sky. Strong focal composition, magical but comforting, no written title or text, consistent character design.`,

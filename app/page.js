@@ -329,13 +329,13 @@ export default function Home() {
         : await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
       if (result.error) throw result.error;
       if (authMode === 'signup' && !result.data.session) {
-        setAuthMessage('Check your email to confirm your account, then return to Moonlit.');
+        setAuthMessage('Check your email to confirm your account, then return to Ami.');
       } else {
         setAuthMessage('You’re signed in.');
         setAuthOpen(false);
       }
     } catch (err) {
-      setAuthMessage(err.message || 'Moonlit could not sign you in.');
+      setAuthMessage(err.message || 'Ami could not sign you in.');
     } finally {
       setAuthLoading(false);
     }
@@ -355,7 +355,7 @@ export default function Home() {
       });
       if (googleError) throw googleError;
     } catch (err) {
-      setAuthMessage(err.message || 'Moonlit could not start Google sign-in.');
+      setAuthMessage(err.message || 'Ami could not start Google sign-in.');
       setAuthLoading(false);
     }
   }
@@ -489,7 +489,7 @@ export default function Home() {
       setSaveMessage(`${localStories.length} local ${localStories.length === 1 ? 'story' : 'stories'} added to your account`);
     } catch (err) {
       console.error(err);
-      setError('Moonlit could not import every local story. Your originals are still safe in this browser.');
+      setError('Ami could not import every local story. Your originals are still safe in this browser.');
     } finally {
       setImportingStories(false);
     }
@@ -538,7 +538,7 @@ export default function Home() {
       setReferencePhotoAnalysis(null);
       await analyzeReferencePhoto(prepared);
     } catch (photoError) {
-      setError(photoError.message || 'Moonlit could not use that photo.');
+      setError(photoError.message || 'Ami could not use that photo.');
     } finally {
       event.target.value = '';
     }
@@ -552,7 +552,7 @@ export default function Home() {
   async function generateStory(event) {
     event.preventDefault();
     if (supabaseConfigured && !user) {
-      requestSignIn('Create a free Moonlit account before generating so this story can stay on your shelf.');
+      requestSignIn('Create a free Ami account before generating so this story can stay on your shelf.');
       return;
     }
     setLoading(true);
@@ -702,7 +702,7 @@ export default function Home() {
       }
     } catch (err) {
       console.error(err);
-      setError('Moonlit could not open your story shelf. Check the Supabase setup and try again.');
+      setError('Ami could not open your story shelf. Check the Supabase setup and try again.');
     } finally {
       setLibraryLoading(false);
     }
@@ -710,7 +710,7 @@ export default function Home() {
 
   async function openLibrary() {
     if (supabaseConfigured && !user) {
-      requestSignIn('Sign in to open your Moonlit story shelf.');
+      requestSignIn('Sign in to open your Ami story shelf.');
       return;
     }
     setStep('library');
@@ -720,7 +720,7 @@ export default function Home() {
   async function saveToLibrary() {
     if (!story) return;
     if (supabaseConfigured && !user) {
-      requestSignIn('Sign in to save this story to your Moonlit shelf.');
+      requestSignIn('Sign in to save this story to your Ami shelf.');
       return;
     }
     setError('');
@@ -748,7 +748,7 @@ export default function Home() {
       window.setTimeout(() => setSaveMessage(''), 2400);
     } catch (err) {
       console.error(err);
-      setError('Moonlit could not save this story. Check your connection and Supabase policies, then try again.');
+      setError('Ami could not save this story. Check your connection and Supabase policies, then try again.');
       setSaveMessage('');
     }
   }
@@ -765,7 +765,7 @@ export default function Home() {
   }
 
   async function deleteSavedStory(id) {
-    if (!window.confirm('Remove this story from your Moonlit shelf?')) return;
+    if (!window.confirm('Remove this story from your Ami shelf?')) return;
     if (supabaseConfigured) {
       const prefix = `${user.id}/${id}`;
       const { data: assets } = await supabase.storage.from('story-assets').list(prefix);
@@ -773,7 +773,7 @@ export default function Home() {
         await supabase.storage.from('story-assets').remove(assets.map((asset) => `${prefix}/${asset.name}`));
       }
       const { error: deleteError } = await supabase.from('stories').delete().eq('id', id);
-      if (deleteError) setError('Moonlit could not delete that story.');
+      if (deleteError) setError('Ami could not delete that story.');
     } else {
       await removeSavedStory(id);
     }
@@ -785,7 +785,7 @@ export default function Home() {
 
     const previewWindow = window.open('', '_blank');
     if (!previewWindow) {
-      setError('Your browser blocked the PDF window. Allow pop-ups for Moonlit and try again.');
+      setError('Your browser blocked the PDF window. Allow pop-ups for Ami and try again.');
       return;
     }
 
@@ -861,11 +861,11 @@ export default function Home() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setCharSpace(1.8);
-      pdf.text('A MOONLIT STORY', SAFE + 8, 590);
+      pdf.text('A STORY BY AMI', SAFE + 8, 590);
       pdf.setCharSpace(0);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(31);
-      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Moonlit Story'), PAGE_W - (SAFE + 8) * 2);
+      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Ami Story'), PAGE_W - (SAFE + 8) * 2);
       pdf.text(titleLines, SAFE + 8, 625, { lineHeightFactor: 1.03 });
       const titleBottom = 625 + titleLines.length * 32;
       if (story.summary) {
@@ -942,10 +942,10 @@ export default function Home() {
         pdf.text(visibleLines, PAGE_W / 2, textY, { align: 'center', lineHeightFactor: 1.35, maxWidth: PAGE_W - 104 });
       }
 
-      const safeName = String(decodeHtmlEntities(story.title || 'moonlit-story'))
+      const safeName = String(decodeHtmlEntities(story.title || 'ami-story'))
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '') || 'moonlit-story';
+        .replace(/^-|-$/g, '') || 'ami-story';
       const blob = pdf.output('blob');
       const blobUrl = URL.createObjectURL(blob);
       previewWindow.location.replace(blobUrl);
@@ -1034,13 +1034,13 @@ export default function Home() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setCharSpace(1.7);
-      pdf.text('A MOONLIT KEEPSAKE', PAGE / 2, 142, { align: 'center' });
+      pdf.text('A KEEPSAKE BY AMI', PAGE / 2, 142, { align: 'center' });
       pdf.setCharSpace(0);
       addEditorialOrnament(168, 66);
       pdf.setTextColor(39, 33, 59);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(30);
-      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Moonlit Story'), PAGE - 126);
+      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Ami Story'), PAGE - 126);
       pdf.text(titleLines, PAGE / 2, 222, { align: 'center', lineHeightFactor: 1.08 });
       const titleBottom = 222 + titleLines.length * 32;
       pdf.setTextColor(99, 89, 122);
@@ -1147,7 +1147,7 @@ export default function Home() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setCharSpace(1.3);
-      pdf.text('MADE WITH MOONLIT', PAGE / 2, 218, { align: 'center' });
+      pdf.text('MADE WITH AMI', PAGE / 2, 218, { align: 'center' });
       pdf.setCharSpace(0);
       addEditorialOrnament(244, 46);
       pdf.setTextColor(39, 33, 59);
@@ -1170,10 +1170,10 @@ export default function Home() {
         addPage();
       }
 
-      const safeName = String(decodeHtmlEntities(story.title || 'moonlit-story'))
+      const safeName = String(decodeHtmlEntities(story.title || 'ami-story'))
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '') || 'moonlit-story';
+        .replace(/^-|-$/g, '') || 'ami-story';
       pdf.save(`${safeName}-8-5x8-5-lulu-interior.pdf`);
     } catch (pdfError) {
       console.error(pdfError);
@@ -1243,11 +1243,11 @@ export default function Home() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setCharSpace(1.6);
-      pdf.text('A MOONLIT STORY', frontCenter, H * 0.70, { align: 'center' });
+      pdf.text('A STORY BY AMI', frontCenter, H * 0.70, { align: 'center' });
       pdf.setCharSpace(0);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(27);
-      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Moonlit Story'), Math.max(120, PANEL - WRAP_SAFE * 2 - HINGE_SAFE));
+      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Ami Story'), Math.max(120, PANEL - WRAP_SAFE * 2 - HINGE_SAFE));
       pdf.text(titleLines.slice(0, 4), frontCenter + HINGE_SAFE / 2, H * 0.76, { align: 'center', lineHeightFactor: 1.05 });
       pdf.setFont('times', 'italic');
       pdf.setFontSize(12);
@@ -1273,14 +1273,14 @@ export default function Home() {
       pdf.line(backCenter - 24, H * 0.34, backCenter + 24, H * 0.34);
       pdf.setFont('times', 'normal');
       pdf.setFontSize(12.5);
-      const blurb = decodeHtmlEntities(backCoverBlurb || story.summary || 'A personalized Moonlit keepsake.');
+      const blurb = decodeHtmlEntities(backCoverBlurb || story.summary || 'A personalized Ami keepsake.');
       const blurbLines = pdf.splitTextToSize(blurb, backWidth);
       pdf.text(blurbLines.slice(0, 10), backX, H * 0.40, { align: 'left', lineHeightFactor: 1.38, maxWidth: backWidth });
       pdf.setTextColor(111, 97, 170);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8.5);
       pdf.setCharSpace(1.1);
-      pdf.text('MADE WITH MOONLIT', backX, H * 0.73);
+      pdf.text('MADE WITH AMI', backX, H * 0.73);
       pdf.setCharSpace(0);
 
       const barcodeW = 260.784; // 3.622 in
@@ -1300,11 +1300,11 @@ export default function Home() {
         pdf.setTextColor(255, 255, 255);
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(Math.min(10, Math.max(7, SPINE * 0.34)));
-        pdf.text(decodeHtmlEntities(story.title || 'Moonlit Story').slice(0, 54), PANEL + SPINE / 2, H / 2, { align: 'center', angle: 90, maxWidth: H - WRAP_SAFE * 2 });
+        pdf.text(decodeHtmlEntities(story.title || 'Ami Story').slice(0, 54), PANEL + SPINE / 2, H / 2, { align: 'center', angle: 90, maxWidth: H - WRAP_SAFE * 2 });
       }
 
-      const safeName = String(decodeHtmlEntities(story.title || 'moonlit-story'))
-        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'moonlit-story';
+      const safeName = String(decodeHtmlEntities(story.title || 'ami-story'))
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ami-story';
       pdf.save(`${safeName}-lulu-casewrap-cover-${totalWidthIn}x${totalHeightIn}.pdf`);
     } catch (coverError) {
       console.error(coverError);
@@ -1318,14 +1318,14 @@ export default function Home() {
     <main>
       <header className="site-header">
         <a className="brand" href="#" onClick={(e) => {e.preventDefault(); setStep('create')}}>
-          <span className="brand-mark">☾</span>
-          <span>moonlit</span>
+          <span className="brand-mark">a</span>
+          <span>ami</span>
         </a>
         <div className="header-actions-global"><a className="header-platform-link" href="/membership">Membership</a>{isAdmin && <a className="header-platform-link studio-link" href="/studio">Studio</a>}<button type="button" className="theme-toggle-button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'} title={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Bedtime'}</span></button><button type="button" onClick={openLibrary}>My stories</button>{supabaseConfigured ? (user ? <div className="account-chip"><span>{user.email}</span><button type="button" onClick={signOut}>Sign out</button></div> : <button type="button" className="sign-in-button" onClick={() => requestSignIn()}>Sign in</button>) : <div className="header-note">Local preview mode</div>}</div>
       </header>
 
       <section className="shell">
-        {user && localImportCount > 0 && <div className="import-banner"><div><strong>Bring your earlier stories with you.</strong><span>Moonlit found {localImportCount} {localImportCount === 1 ? 'story' : 'stories'} saved in this browser.</span></div><button type="button" onClick={importLocalStories} disabled={importingStories}>{importingStories ? 'Importing…' : 'Add to my account'}</button></div>}
+        {user && localImportCount > 0 && <div className="import-banner"><div><strong>Bring your earlier stories with you.</strong><span>Ami found {localImportCount} {localImportCount === 1 ? 'story' : 'stories'} saved in this browser.</span></div><button type="button" onClick={importLocalStories} disabled={importingStories}>{importingStories ? 'Importing…' : 'Add to my account'}</button></div>}
         {step !== 'library' && <div className="progress-row" aria-label="Progress">
           {['Create', 'Review', 'Read'].map((label, index) => (
             <div className={`progress-item ${progress >= index + 1 ? 'active' : ''}`} key={label}>
@@ -1342,7 +1342,7 @@ export default function Home() {
               <p>Create a personal storybook that gently reflects what your child is working through and how you want them to feel by the end.</p>
               <div className="promise-card">
                 <div className="spark">✦</div>
-                <div><strong>Personal, not preachy.</strong><br/>Moonlit turns a real childhood challenge into a warm, imaginative story your family can share tonight.</div>
+                <div><strong>Personal, not preachy.</strong><br/>Ami turns a real childhood challenge into a warm, imaginative story your family can share tonight.</div>
               </div>
               <div className="floating-art" aria-hidden="true">
                 <div className="moon">☾</div>
@@ -1367,7 +1367,7 @@ export default function Home() {
                 <div className="photo-personalization-copy">
                   <strong>Make the character feel more like your child <span className="optional">optional</span></strong>
                   <p>Upload one clear photo to inspire the illustrated character’s hair, features, age, and overall look.</p>
-                  <small>Moonlit creates a storybook-inspired likeness, not an exact portrait. Use a photo you have permission to upload.</small>
+                  <small>Ami creates a storybook-inspired likeness, not an exact portrait. Use a photo you have permission to upload.</small>
                 </div>
                 {referencePhoto ? (
                   <div className="photo-preview-wrap">
@@ -1439,7 +1439,7 @@ export default function Home() {
 
               {error && <div className="error">{error}</div>}
               <button className="primary-button" disabled={loading}>{loading ? loadingMessage || 'Writing your story…' : form.storyMode === 'Challenge' ? 'Create their challenge story' : 'Create my story'}<span>→</span></button>
-              <p className="privacy-note">Use a first name or nickname. Moonlit does not need private information about your child.</p>
+              <p className="privacy-note">Use a first name or nickname. Ami does not need private information about your child.</p>
             </form>
           </div>
         )}
@@ -1465,7 +1465,7 @@ export default function Home() {
                   <>
                     <img src={story.coverImageUrl} alt={`Cover artwork for ${story.title}`} />
                     <div className="cover-title-overlay">
-                      <small>A Moonlit Story</small>
+                      <small>A Story by Ami</small>
                       <h3>{decodeHtmlEntities(story.title)}</h3>
                       {story.characterBible?.name && <p>For {story.characterBible.name}</p>}
                     </div>
@@ -1540,7 +1540,7 @@ export default function Home() {
         {step === 'library' && (
           <section className="library-view">
             <div className="library-header">
-              <div><div className="eyebrow">Your Moonlit shelf</div><h1>My Stories</h1><p>Your books are saved to your account and available wherever you sign in.</p></div>
+              <div><div className="eyebrow">Your Ami shelf</div><h1>My Stories</h1><p>Your books are saved to your account and available wherever you sign in.</p></div>
               <button className="primary-small" onClick={() => { setStory(null); setStoryId(null); setForm(emptyForm); setReferencePhoto(''); setReferencePhotoAnalysis(null); setStep('create'); }}>Create a new story</button>
             </div>
             {error && <div className="error">{error}</div>}
@@ -1556,11 +1556,11 @@ export default function Home() {
                       {record.coverImageUrl ? (
                         <>
                           <img src={record.coverImageUrl} alt="" />
-                          <div className="library-cover-overlay"><small>A Moonlit Story</small><strong>{record.title}</strong></div>
+                          <div className="library-cover-overlay"><small>A Story by Ami</small><strong>{record.title}</strong></div>
                         </>
                       ) : <div><span>☾</span><strong>{record.title}</strong></div>}
                     </button>
-                    <div className="library-card-copy"><small>{record.childName ? `For ${record.childName}` : 'Moonlit story'} · {new Date(record.updatedAt).toLocaleDateString()}</small><h2>{record.title}</h2></div>
+                    <div className="library-card-copy"><small>{record.childName ? `For ${record.childName}` : 'Ami story'} · {new Date(record.updatedAt).toLocaleDateString()}</small><h2>{record.title}</h2></div>
                     <div className="library-card-actions"><button onClick={() => loadSavedStory(record, 'review')}>Edit</button><button onClick={() => loadSavedStory(record, 'read')}>Read</button><button className="delete-story" onClick={() => deleteSavedStory(record.id)}>Delete</button></div>
                   </article>
                 ))}
@@ -1600,11 +1600,11 @@ export default function Home() {
         )}
 
         {authOpen && <div className="auth-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setAuthOpen(false); }}>
-          <section className="auth-modal" role="dialog" aria-modal="true" aria-label="Moonlit account">
+          <section className="auth-modal" role="dialog" aria-modal="true" aria-label="Ami account">
             <button type="button" className="auth-close" onClick={() => setAuthOpen(false)} aria-label="Close">×</button>
-            <div className="auth-moon">☾</div>
+            <div className="auth-moon">a</div>
             <div className="eyebrow">Keep their stories close</div>
-            <h2>{authMode === 'signup' ? 'Create your Moonlit account' : 'Welcome back'}</h2>
+            <h2>{authMode === 'signup' ? 'Create your Ami account' : 'Welcome back'}</h2>
             <p>{authMode === 'signup' ? 'Save books, continue illustrations, and open your family shelf on any device.' : 'Sign in to open your saved stories and continue where you left off.'}</p>
             <button type="button" className="google-auth-button" onClick={signInWithGoogle} disabled={authLoading}>
               <span className="google-mark" aria-hidden="true">G</span>
@@ -1617,8 +1617,8 @@ export default function Home() {
               {authMessage && <div className="auth-message">{authMessage}</div>}
               <button className="primary-button" disabled={authLoading}>{authLoading ? 'One moment…' : authMode === 'signup' ? 'Create free account' : 'Sign in'}<span>→</span></button>
             </form>
-            <button type="button" className="auth-switch" onClick={() => { setAuthMode(authMode === 'signup' ? 'signin' : 'signup'); setAuthMessage(''); }}>{authMode === 'signup' ? 'Already have an account? Sign in' : 'New to Moonlit? Create an account'}</button>
-            <small className="auth-privacy">Use a parent or guardian email. Moonlit only needs a child’s first name or nickname.</small>
+            <button type="button" className="auth-switch" onClick={() => { setAuthMode(authMode === 'signup' ? 'signin' : 'signup'); setAuthMessage(''); }}>{authMode === 'signup' ? 'Already have an account? Sign in' : 'New to Ami? Create an account'}</button>
+            <small className="auth-privacy">Use a parent or guardian email. Ami only needs a child’s first name or nickname.</small>
           </section>
         </div>}
 
@@ -1626,7 +1626,7 @@ export default function Home() {
           <section className="print-book" aria-hidden="true">
             <article className="print-cover">
               {story.coverImageUrl && <img src={story.coverImageUrl} alt="" />}
-              <div className="print-cover-title"><small>A Moonlit Story</small><h1>{decodeHtmlEntities(story.title)}</h1><p>{decodeHtmlEntities(story.summary)}</p></div>
+              <div className="print-cover-title"><small>A Story by Ami</small><h1>{decodeHtmlEntities(story.title)}</h1><p>{decodeHtmlEntities(story.summary)}</p></div>
             </article>
             {story.pages.map((page, index) => (
               <article className="print-page" key={`print-${page.pageNumber}`}>

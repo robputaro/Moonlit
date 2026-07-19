@@ -1,8 +1,8 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'Moonlit | Personalized Storybooks',
-  description: "Turn your child's world into tonight's bedtime story."
+  title: 'Stories by Ami | Personalized Storybooks',
+  description: "Personalized stories made from their world."
 };
 
 export default function RootLayout({ children }) {

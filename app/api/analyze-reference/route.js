@@ -40,6 +40,6 @@ export async function POST(request) {
     return NextResponse.json({ profile: extractJson(outputText) });
   } catch (error) {
     console.error('Reference photo analysis failed:', error);
-    return NextResponse.json({ error: 'Moonlit could not analyze that photo. Try a clear, well-lit image.' }, { status: 500 });
+    return NextResponse.json({ error: 'Ami could not analyze that photo. Try a clear, well-lit image.' }, { status: 500 });
   }
 }

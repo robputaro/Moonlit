@@ -21,7 +21,7 @@ export default function StudioPage() {
   useEffect(() => {
     if (!supabaseConfigured) {
       setLoading(false);
-      setMessage('Connect Supabase to use Moonlit Studio.');
+      setMessage('Connect Supabase to use Ami Studio.');
       return undefined;
     }
 
@@ -72,16 +72,16 @@ export default function StudioPage() {
     };
   }, []);
 
-  if (loading) return <main className="platform-page"><div className="platform-shell"><p>Opening Moonlit Studio…</p></div></main>;
+  if (loading) return <main className="platform-page"><div className="platform-shell"><p>Opening Ami Studio…</p></div></main>;
 
   if (!user) {
     return (
       <main className="platform-page">
         <div className="platform-shell platform-gate">
-          <span className="platform-kicker">Moonlit Studio</span>
-          <h1>Sign in from Moonlit first.</h1>
-          <p>Studio is reserved for the Moonlit production team.</p>
-          <Link className="platform-primary" href="/">Return to Moonlit</Link>
+          <span className="platform-kicker">Ami Studio</span>
+          <h1>Sign in to Ami first.</h1>
+          <p>Studio is reserved for the Ami production team.</p>
+          <Link className="platform-primary" href="/">Return to Stories by Ami</Link>
         </div>
       </main>
     );
@@ -91,10 +91,10 @@ export default function StudioPage() {
     return (
       <main className="platform-page">
         <div className="platform-shell platform-gate">
-          <span className="platform-kicker">Moonlit Studio</span>
+          <span className="platform-kicker">Ami Studio</span>
           <h1>This account does not have Studio access.</h1>
           <p>Signed in as {user.email}</p>
-          <Link className="platform-primary" href="/">Return to Moonlit</Link>
+          <Link className="platform-primary" href="/">Return to Stories by Ami</Link>
         </div>
       </main>
     );
@@ -106,11 +106,11 @@ export default function StudioPage() {
         <header className="studio-header">
           <div>
             <span className="platform-kicker">Private production workspace</span>
-            <h1>Moonlit Studio</h1>
+            <h1>Ami Studio</h1>
             <p>Create Etsy and premium orders, manage proofs, and prepare approved books for print.</p>
           </div>
           <div className="studio-header-actions">
-            <Link href="/">Public Moonlit</Link>
+            <Link href="/">Public Ami</Link>
             <button type="button" disabled title="Project intake arrives in Studio v1.1">New project</button>
           </div>
         </header>
@@ -141,7 +141,7 @@ export default function StudioPage() {
             <div className="studio-order-list">
               {orders.map((order) => (
                 <article key={order.id}>
-                  <div><small>{order.source || 'Moonlit'} · {order.product_type || 'Keepsake'}</small><h3>{order.child_name || 'Untitled child project'}</h3><p>{order.customer_name || 'Customer details pending'}</p></div>
+                  <div><small>{order.source || 'Ami'} · {order.product_type || 'Keepsake'}</small><h3>{order.child_name || 'Untitled child project'}</h3><p>{order.customer_name || 'Customer details pending'}</p></div>
                   <div><span className="studio-status">{String(order.status || 'new_order').replaceAll('_', ' ')}</span><small>{order.due_date ? `Due ${new Date(order.due_date).toLocaleDateString()}` : 'No due date'}</small></div>
                 </article>
               ))}

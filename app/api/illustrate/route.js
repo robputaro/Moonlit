@@ -13,7 +13,7 @@ function buildImagePrompt({ storyTitle, style, characterBible, page, kind }) {
 
   return `Create one polished portrait illustration for a children's picture book.
 
-BOOK: ${storyTitle || 'Moonlit Story'}
+BOOK: ${storyTitle || 'Ami Story'}
 IMAGE TYPE: ${kind === 'cover' ? 'front cover artwork without any words' : 'interior story page'}
 ART DIRECTION: ${style || 'soft watercolor picture-book illustration'}
 
