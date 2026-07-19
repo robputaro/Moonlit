@@ -48,6 +48,49 @@ const imageLoadingMessages = [
 ];
 
 
+function decodeHtmlEntities(value) {
+  if (typeof value !== 'string' || !value.includes('&')) return value;
+
+  // Decode both named and numeric HTML entities without injecting HTML into the page.
+  if (typeof document !== 'undefined') {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = value;
+    return textarea.value;
+  }
+
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)));
+}
+
+function decodeStoryEntities(story) {
+  if (!story || typeof story !== 'object') return story;
+  return {
+    ...story,
+    title: decodeHtmlEntities(story.title || ''),
+    summary: decodeHtmlEntities(story.summary || ''),
+    takeaway: decodeHtmlEntities(story.takeaway || ''),
+    dedication: decodeHtmlEntities(story.dedication || ''),
+    coverPrompt: decodeHtmlEntities(story.coverPrompt || ''),
+    characterBible: story.characterBible ? {
+      ...story.characterBible,
+      name: decodeHtmlEntities(story.characterBible.name || ''),
+      description: decodeHtmlEntities(story.characterBible.description || '')
+    } : story.characterBible,
+    pages: Array.isArray(story.pages) ? story.pages.map((page) => ({
+      ...page,
+      text: decodeHtmlEntities(page.text || ''),
+      illustrationPrompt: decodeHtmlEntities(page.illustrationPrompt || ''),
+      coverPrompt: decodeHtmlEntities(page.coverPrompt || '')
+    })) : story.pages
+  };
+}
+
 const LIBRARY_DB = 'moonlit-library';
 const LIBRARY_STORE = 'stories';
 
@@ -424,7 +467,7 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Story generation failed.');
-      setStory({ ...data, language: generationInput.language || 'en', dedication: generationInput.dedication || '' });
+      setStory(decodeStoryEntities({ ...data, language: generationInput.language || 'en', dedication: generationInput.dedication || '' }));
       setStoryId(null);
       setStep('review');
       setPageIndex(0);
@@ -592,7 +635,7 @@ export default function Home() {
   }
 
   function loadSavedStory(record, targetStep = 'review') {
-    setStory(record.story);
+    setStory(decodeStoryEntities(record.story));
     setForm({ ...emptyForm, ...(record.form || {}) });
     setStoryId(record.id);
     setPageIndex(0);
@@ -701,18 +744,18 @@ export default function Home() {
       pdf.setCharSpace(0);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(31);
-      const titleLines = pdf.splitTextToSize(story.title || 'Moonlit Story', PAGE_W - (SAFE + 8) * 2);
+      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Moonlit Story'), PAGE_W - (SAFE + 8) * 2);
       pdf.text(titleLines, SAFE + 8, 625, { lineHeightFactor: 1.03 });
       const titleBottom = 625 + titleLines.length * 32;
       if (story.summary) {
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(10.5);
         pdf.setTextColor(238, 234, 247);
-        const summaryLines = pdf.splitTextToSize(story.summary, PAGE_W - (SAFE + 8) * 2);
+        const summaryLines = pdf.splitTextToSize(decodeHtmlEntities(story.summary), PAGE_W - (SAFE + 8) * 2);
         pdf.text(summaryLines.slice(0, 4), SAFE + 8, Math.min(titleBottom + 10, 742), { lineHeightFactor: 1.35 });
       }
 
-      const dedication = story.dedication || form.dedication;
+      const dedication = decodeHtmlEntities(story.dedication || form.dedication || '');
       if (dedication) {
         pdf.addPage('letter', 'portrait');
         pdf.setFillColor(255, 252, 246);
@@ -763,13 +806,13 @@ export default function Home() {
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(7.5);
         pdf.setCharSpace(1.2);
-        pdf.text(`${String(story.title || '').toUpperCase()} · ${index + 1}`, PAGE_W / 2, 566, { align: 'center', maxWidth: PAGE_W - 96 });
+        pdf.text(`${String(decodeHtmlEntities(story.title || '')).toUpperCase()} · ${index + 1}`, PAGE_W / 2, 566, { align: 'center', maxWidth: PAGE_W - 96 });
         pdf.setCharSpace(0);
 
         pdf.setTextColor(39, 33, 59);
         pdf.setFont('times', 'normal');
         pdf.setFontSize(14);
-        const storyLines = pdf.splitTextToSize(page.text || '', PAGE_W - 104);
+        const storyLines = pdf.splitTextToSize(decodeHtmlEntities(page.text || ''), PAGE_W - 104);
         const maxLines = 10;
         const visibleLines = storyLines.slice(0, maxLines);
         const lineHeight = 19;
@@ -778,7 +821,7 @@ export default function Home() {
         pdf.text(visibleLines, PAGE_W / 2, textY, { align: 'center', lineHeightFactor: 1.35, maxWidth: PAGE_W - 104 });
       }
 
-      const safeName = String(story.title || 'moonlit-story')
+      const safeName = String(decodeHtmlEntities(story.title || 'moonlit-story'))
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '') || 'moonlit-story';
@@ -868,7 +911,7 @@ export default function Home() {
       pdf.setTextColor(39, 33, 59);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(29);
-      const titleLines = pdf.splitTextToSize(story.title || 'Moonlit Story', PAGE - SAFE * 2);
+      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Moonlit Story'), PAGE - SAFE * 2);
       pdf.text(titleLines, PAGE / 2, 230, { align: 'center', lineHeightFactor: 1.08 });
       addMoon(420);
 
@@ -884,7 +927,7 @@ export default function Home() {
       pdf.setFont('times', 'bold');
       pdf.setFontSize(28);
       pdf.text(story.characterBible?.name || form.childName || 'You', PAGE / 2, 218, { align: 'center' });
-      const dedication = story.dedication || form.dedication;
+      const dedication = decodeHtmlEntities(story.dedication || form.dedication || '');
       if (dedication) {
         pdf.setFont('times', 'italic');
         pdf.setFontSize(17);
@@ -918,7 +961,7 @@ export default function Home() {
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(7.5);
         pdf.setCharSpace(1.2);
-        pdf.text(`${String(story.title || '').toUpperCase()} · ${index + 1}`, PAGE / 2, 105, { align: 'center', maxWidth: PAGE - SAFE * 2 });
+        pdf.text(`${String(decodeHtmlEntities(story.title || '')).toUpperCase()} · ${index + 1}`, PAGE / 2, 105, { align: 'center', maxWidth: PAGE - SAFE * 2 });
         pdf.setCharSpace(0);
         pdf.setTextColor(39, 33, 59);
         pdf.setFont('times', 'normal');
@@ -972,7 +1015,7 @@ export default function Home() {
         addMoon(PAGE / 2 + 8);
       }
 
-      const safeName = String(story.title || 'moonlit-story')
+      const safeName = String(decodeHtmlEntities(story.title || 'moonlit-story'))
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '') || 'moonlit-story';
@@ -1104,13 +1147,13 @@ export default function Home() {
         {step === 'review' && story && (
           <section className="review-layout">
             <div className="review-header">
-              <div><div className="eyebrow">Your story draft</div><h1>{story.title}</h1><p>{story.summary}</p></div>
+              <div><div className="eyebrow">Your story draft</div><h1>{decodeHtmlEntities(story.title)}</h1><p>{decodeHtmlEntities(story.summary)}</p></div>
               <div className="header-actions"><button className="ghost" onClick={() => setStep('create')}>Edit setup</button><button className="ghost" onClick={generateCover} disabled={coverLoading}>{coverLoading ? 'Creating cover…' : story.coverImageUrl ? 'Regenerate cover' : 'Generate cover'}</button><button className="ghost" onClick={generateAllImages} disabled={generatingAll}>{generatingAll ? 'Illustrating pages…' : 'Generate all images'}</button><button className="primary-small" onClick={() => setStep('read')}>Open storybook →</button></div>
             </div>
             <div className="story-meta">
               <div><small>Starring</small><strong>{story.characterBible?.name}</strong></div>
               <div><small>Visual style</small><strong>{form.style}</strong></div>
-              <div><small>Gentle takeaway</small><strong>{story.takeaway}</strong></div>
+              <div><small>Gentle takeaway</small><strong>{decodeHtmlEntities(story.takeaway)}</strong></div>
             </div>
             {error && <div className="error review-error">{error}</div>}
             <div className="image-note"><strong>Illustrations are generated separately.</strong> Create one page at a time, or generate the whole book after you approve the writing. Each image uses OpenAI API credits.</div>
@@ -1122,14 +1165,14 @@ export default function Home() {
                     <img src={story.coverImageUrl} alt={`Cover artwork for ${story.title}`} />
                     <div className="cover-title-overlay">
                       <small>A Moonlit Story</small>
-                      <h3>{story.title}</h3>
+                      <h3>{decodeHtmlEntities(story.title)}</h3>
                       {story.characterBible?.name && <p>For {story.characterBible.name}</p>}
                     </div>
                   </>
                 ) : (
                   <div className="cover-placeholder">
                     <span>Cover direction</span>
-                    <h3>{story.title}</h3>
+                    <h3>{decodeHtmlEntities(story.title)}</h3>
                     <p>{story.coverPrompt || 'A warm portrait cover featuring the child and the story’s central magical moment.'}</p>
                   </div>
                 )}
@@ -1152,7 +1195,7 @@ export default function Home() {
                       {imageLoading[index] ? imageLoadingMessage[index] || 'Creating illustration…' : page.imageUrl ? 'Regenerate image' : 'Generate image'}
                     </button>
                   </div>
-                  <div className="page-copy"><label>Page text</label><textarea value={page.text} onChange={(e) => updatePage(index, e.target.value)} /></div>
+                  <div className="page-copy"><label>Page text</label><textarea value={decodeHtmlEntities(page.text)} onChange={(e) => updatePage(index, e.target.value)} /></div>
                 </article>
               ))}
             </div>
@@ -1212,7 +1255,7 @@ export default function Home() {
             {story.coverImageUrl && (
               <div className="reader-cover-strip">
                 <img src={story.coverImageUrl} alt={`Cover of ${story.title}`} />
-                <div><small>Cover</small><strong>{story.title}</strong></div>
+                <div><small>Cover</small><strong>{decodeHtmlEntities(story.title)}</strong></div>
               </div>
             )}
             <div className="book-stage">
@@ -1224,7 +1267,7 @@ export default function Home() {
                     <><div className="reader-moon">☾</div><div className="reader-stars">✦ &nbsp; · &nbsp; ✧</div><div className="prompt-caption">Generate this page's illustration from the review screen.</div></>
                   )}
                 </div>
-                <div className="reader-copy"><div className="tiny-title">{story.title}</div><p>{story.pages[pageIndex].text}</p></div>
+                <div className="reader-copy"><div className="tiny-title">{decodeHtmlEntities(story.title)}</div><p>{decodeHtmlEntities(story.pages[pageIndex].text)}</p></div>
               </div>
             </div>
             <div className="reader-nav"><button disabled={pageIndex === 0} onClick={() => setPageIndex((i) => i - 1)}>← Previous</button><div className="dots">{story.pages.map((_, i) => <button aria-label={`Page ${i+1}`} key={i} className={i === pageIndex ? 'active' : ''} onClick={() => setPageIndex(i)} />)}</div><button disabled={pageIndex === story.pages.length - 1} onClick={() => setPageIndex((i) => i + 1)}>Next →</button></div>
@@ -1258,12 +1301,12 @@ export default function Home() {
           <section className="print-book" aria-hidden="true">
             <article className="print-cover">
               {story.coverImageUrl && <img src={story.coverImageUrl} alt="" />}
-              <div className="print-cover-title"><small>A Moonlit Story</small><h1>{story.title}</h1><p>{story.summary}</p></div>
+              <div className="print-cover-title"><small>A Moonlit Story</small><h1>{decodeHtmlEntities(story.title)}</h1><p>{decodeHtmlEntities(story.summary)}</p></div>
             </article>
             {story.pages.map((page, index) => (
               <article className="print-page" key={`print-${page.pageNumber}`}>
                 <div className="print-image">{page.imageUrl ? <img src={page.imageUrl} alt="" /> : <div className="print-placeholder">Illustration not generated</div>}</div>
-                <div className="print-copy"><small>{story.title} · {index + 1}</small><p>{page.text}</p></div>
+                <div className="print-copy"><small>{decodeHtmlEntities(story.title)} · {index + 1}</small><p>{decodeHtmlEntities(page.text)}</p></div>
               </article>
             ))}
           </section>
