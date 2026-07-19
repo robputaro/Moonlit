@@ -207,6 +207,9 @@ export default function Home() {
   const [importingStories, setImportingStories] = useState(false);
   const [theme, setTheme] = useState('light');
   const [keepsakeExporting, setKeepsakeExporting] = useState(false);
+  const [coverExporting, setCoverExporting] = useState(false);
+  const [coverSpec, setCoverSpec] = useState({ totalWidth: '18.00', totalHeight: '9.75', spineWidth: '0.25' });
+  const [backCoverBlurb, setBackCoverBlurb] = useState('');
 
   const progress = useMemo(() => {
     if (step === 'create') return 1;
@@ -228,6 +231,10 @@ export default function Home() {
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (themeMeta) themeMeta.setAttribute('content', theme === 'dark' ? '#12101d' : '#f7f0e5');
   }, [theme]);
+
+  useEffect(() => {
+    if (story?.summary && !backCoverBlurb) setBackCoverBlurb(decodeHtmlEntities(story.summary));
+  }, [story?.summary]);
 
   useEffect(() => {
     if (!loading) return undefined;
@@ -1042,6 +1049,123 @@ export default function Home() {
     }
   }
 
+
+  async function exportWraparoundCoverPdf() {
+    if (!story || coverExporting) return;
+    setCoverExporting(true);
+    setError('');
+
+    try {
+      const { jsPDF } = await import('jspdf');
+      const totalWidthIn = Number.parseFloat(coverSpec.totalWidth);
+      const totalHeightIn = Number.parseFloat(coverSpec.totalHeight);
+      const spineWidthIn = Number.parseFloat(coverSpec.spineWidth);
+      if (![totalWidthIn, totalHeightIn, spineWidthIn].every(Number.isFinite) || totalWidthIn <= 0 || totalHeightIn <= 0 || spineWidthIn < 0) {
+        throw new Error('Enter valid cover-template dimensions before exporting.');
+      }
+
+      const W = totalWidthIn * 72;
+      const H = totalHeightIn * 72;
+      const SPINE = spineWidthIn * 72;
+      const PANEL = (W - SPINE) / 2;
+      const WRAP_SAFE = 54;
+      const HINGE_SAFE = 24;
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: [W, H], compress: true });
+
+      const fetchDataUrl = async (url) => {
+        if (!url) return null;
+        if (url.startsWith('data:')) return url;
+        const response = await fetch(url, { mode: 'cors', credentials: 'omit' });
+        if (!response.ok) throw new Error(`Cover image request failed (${response.status})`);
+        const blob = await response.blob();
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      };
+
+      // Required integrated-spread order: back cover, spine, front cover.
+      pdf.setFillColor(31, 25, 48);
+      pdf.rect(0, 0, W, H, 'F');
+      pdf.setFillColor(247, 241, 232);
+      pdf.rect(0, 0, PANEL, H, 'F');
+
+      const coverData = await fetchDataUrl(story.coverImageUrl);
+      if (coverData) {
+        pdf.addImage(coverData, 'JPEG', PANEL + SPINE, 0, PANEL, H, undefined, 'FAST');
+        pdf.setFillColor(22, 17, 37);
+        pdf.setGState(new pdf.GState({ opacity: 0.58 }));
+        pdf.rect(PANEL + SPINE, H * 0.61, PANEL, H * 0.39, 'F');
+        pdf.setGState(new pdf.GState({ opacity: 1 }));
+      } else {
+        pdf.setFillColor(69, 57, 98);
+        pdf.rect(PANEL + SPINE, 0, PANEL, H, 'F');
+      }
+
+      const frontCenter = PANEL + SPINE + PANEL / 2;
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setCharSpace(1.6);
+      pdf.text('A MOONLIT STORY', frontCenter, H * 0.70, { align: 'center' });
+      pdf.setCharSpace(0);
+      pdf.setFont('times', 'bold');
+      pdf.setFontSize(27);
+      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Moonlit Story'), Math.max(120, PANEL - WRAP_SAFE * 2 - HINGE_SAFE));
+      pdf.text(titleLines.slice(0, 4), frontCenter + HINGE_SAFE / 2, H * 0.76, { align: 'center', lineHeightFactor: 1.05 });
+      pdf.setFont('times', 'italic');
+      pdf.setFontSize(12);
+      pdf.text(`Created especially for ${story.characterBible?.name || form.childName || 'you'}`, frontCenter + HINGE_SAFE / 2, H * 0.91, { align: 'center' });
+
+      pdf.setTextColor(39, 33, 59);
+      pdf.setFont('times', 'bold');
+      pdf.setFontSize(20);
+      pdf.text('A story made just for them.', PANEL / 2, H * 0.25, { align: 'center' });
+      pdf.setFont('times', 'normal');
+      pdf.setFontSize(13);
+      const blurb = decodeHtmlEntities(backCoverBlurb || story.summary || 'A personalized Moonlit keepsake.');
+      const blurbLines = pdf.splitTextToSize(blurb, Math.max(120, PANEL - WRAP_SAFE * 2 - HINGE_SAFE));
+      pdf.text(blurbLines.slice(0, 10), PANEL / 2 - HINGE_SAFE / 2, H * 0.34, { align: 'center', lineHeightFactor: 1.45 });
+      pdf.setTextColor(111, 97, 170);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.setCharSpace(1.2);
+      pdf.text('MADE WITH MOONLIT', PANEL / 2 - HINGE_SAFE / 2, H * 0.72, { align: 'center' });
+      pdf.setCharSpace(0);
+
+      const barcodeW = 144;
+      const barcodeH = 86;
+      const barcodeX = PANEL - WRAP_SAFE - barcodeW;
+      const barcodeY = H - WRAP_SAFE - barcodeH;
+      pdf.setFillColor(255, 255, 255);
+      pdf.roundedRect(barcodeX, barcodeY, barcodeW, barcodeH, 4, 4, 'F');
+      pdf.setDrawColor(205, 199, 216);
+      pdf.roundedRect(barcodeX, barcodeY, barcodeW, barcodeH, 4, 4, 'S');
+      pdf.setTextColor(126, 117, 142);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(7);
+      pdf.text('RESERVED BARCODE AREA', barcodeX + barcodeW / 2, barcodeY + barcodeH / 2 + 2, { align: 'center' });
+
+      if (spineWidthIn >= 0.35) {
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(Math.min(10, Math.max(7, SPINE * 0.34)));
+        pdf.text(decodeHtmlEntities(story.title || 'Moonlit Story').slice(0, 54), PANEL + SPINE / 2, H / 2, { align: 'center', angle: 90, maxWidth: H - WRAP_SAFE * 2 });
+      }
+
+      const safeName = String(decodeHtmlEntities(story.title || 'moonlit-story'))
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'moonlit-story';
+      pdf.save(`${safeName}-wraparound-cover-${totalWidthIn}x${totalHeightIn}.pdf`);
+    } catch (coverError) {
+      console.error(coverError);
+      setError(`We could not create the wraparound cover PDF: ${coverError.message || 'Unknown error'}`);
+    } finally {
+      setCoverExporting(false);
+    }
+  }
+
   return (
     <main>
       <header className="site-header">
@@ -1213,14 +1337,38 @@ export default function Home() {
                 </article>
               ))}
             </div>
-            <aside className="print-readiness-card">
-              <div><span className="print-readiness-kicker">8×8 keepsake readiness</span><strong>{story.coverImageUrl && story.pages.every((page) => page.imageUrl) ? 'Ready for a proof export' : 'A few items still need attention'}</strong></div>
-              <ul>
-                <li className={story.coverImageUrl ? 'ready' : 'warning'}>{story.coverImageUrl ? 'Cover artwork generated' : 'Generate the cover artwork'}</li>
-                <li className={story.pages.every((page) => page.imageUrl) ? 'ready' : 'warning'}>{story.pages.filter((page) => page.imageUrl).length} of {story.pages.length} interior illustrations generated</li>
-                <li className={(story.language || form.language) === 'en-es' ? 'note' : 'ready'}>{(story.language || form.language) === 'en-es' ? 'Bilingual text uses the compact keepsake layout' : 'Single-language text has standard print spacing'}</li>
-                <li className={story.pages.length === 10 ? 'ready' : 'note'}>{story.pages.length === 10 ? '10 scenes create a natural 24-page keepsake' : `${story.pages.length} scenes will be normalized to a multiple-of-four page count`}</li>
-              </ul>
+            <aside className="print-production-panel">
+              <div className="print-production-heading">
+                <div><span className="print-readiness-kicker">Print review</span><strong>{story.coverImageUrl && story.pages.every((page) => page.imageUrl) ? 'Ready to prepare a physical proof' : 'Complete the artwork before ordering'}</strong><p>Interior: 8×8 trim with bleed. Cover: one-piece back, spine, and front spread.</p></div>
+                <div className={`production-score ${story.coverImageUrl && story.pages.every((page) => page.imageUrl) ? 'ready' : ''}`}>{story.pages.filter((page) => page.imageUrl).length + (story.coverImageUrl ? 1 : 0)}/{story.pages.length + 1}</div>
+              </div>
+              <div className="print-production-grid">
+                <div className="print-checklist">
+                  <h3>Preflight checklist</h3>
+                  <ul>
+                    <li className={story.coverImageUrl ? 'ready' : 'warning'}>{story.coverImageUrl ? 'Cover artwork generated' : 'Generate the cover artwork'}</li>
+                    <li className={story.pages.every((page) => page.imageUrl) ? 'ready' : 'warning'}>{story.pages.filter((page) => page.imageUrl).length} of {story.pages.length} interior illustrations generated</li>
+                    <li className={(story.language || form.language) === 'en-es' ? 'note' : 'ready'}>{(story.language || form.language) === 'en-es' ? 'Bilingual compact text layout active' : 'Single-language print spacing active'}</li>
+                    <li className={story.pages.length === 10 ? 'ready' : 'note'}>{story.pages.length === 10 ? '24-page casewrap minimum reached' : `${story.pages.length} scenes normalize to a multiple of four`}</li>
+                    <li className="note">Review image sharpness in the printer preview and physical proof</li>
+                  </ul>
+                </div>
+                <div className="cover-settings">
+                  <h3>Printer cover template</h3>
+                  <p>Upload the interior first, then copy the exact total dimensions from the printer’s custom cover template.</p>
+                  <div className="cover-dimension-row">
+                    <label>Total width (in)<input type="number" min="1" step="0.001" value={coverSpec.totalWidth} onChange={(e) => setCoverSpec((current) => ({ ...current, totalWidth: e.target.value }))} /></label>
+                    <label>Total height (in)<input type="number" min="1" step="0.001" value={coverSpec.totalHeight} onChange={(e) => setCoverSpec((current) => ({ ...current, totalHeight: e.target.value }))} /></label>
+                    <label>Spine width (in)<input type="number" min="0" step="0.001" value={coverSpec.spineWidth} onChange={(e) => setCoverSpec((current) => ({ ...current, spineWidth: e.target.value }))} /></label>
+                  </div>
+                  <label className="back-blurb-field">Back-cover blurb<textarea value={backCoverBlurb} onChange={(e) => setBackCoverBlurb(e.target.value)} maxLength={650} /></label>
+                  <small>The defaults are a design proof only. The final upload must use the exact custom template dimensions generated after the interior is uploaded.</small>
+                </div>
+              </div>
+              <div className="print-export-actions">
+                <button type="button" className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building interior…' : 'Download interior PDF'}</button>
+                <button type="button" className="ghost keepsake-button" onClick={exportWraparoundCoverPdf} disabled={coverExporting || !story.coverImageUrl}>{coverExporting ? 'Building cover…' : 'Download wraparound cover PDF'}</button>
+              </div>
             </aside>
             <div className="sticky-actions"><span className="save-status">{saveMessage}</span><button className="ghost" onClick={saveToLibrary}>Save to My Stories</button><button className="ghost" onClick={printStory}>Digital PDF</button><button className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building 8×8…' : '8×8 Keepsake PDF'}</button><button className="primary-small" onClick={() => setStep('read')}>Read the story →</button></div>
           </section>
