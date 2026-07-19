@@ -1275,12 +1275,6 @@ export default function Home() {
                 <button type="button" className={form.storyMode === 'Challenge' ? 'active' : ''} onClick={() => selectStoryMode('Challenge')}>Challenge story</button>
                 <button type="button" className={form.storyMode === 'Fun' ? 'active' : ''} onClick={() => selectStoryMode('Fun')}>Just for fun</button>
               </div>
-              <label className="mobile-story-selector">Story type
-                <select value={form.storyMode} onChange={(e) => selectStoryMode(e.target.value)}>
-                  <option value="Challenge">Challenge story</option>
-                  <option value="Fun">Just for fun</option>
-                </select>
-              </label>
 
               {form.storyMode === 'Challenge' ? (
                 <>

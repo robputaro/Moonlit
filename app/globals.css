@@ -1121,7 +1121,7 @@ html[data-theme='dark'] .print-production-panel{background:linear-gradient(145de
 /* Responsive story selector: visual cards on desktop, compact selects on mobile. */
 .mobile-story-selector{display:none}
 @media(max-width:580px){
-  .desktop-story-mode,.desktop-story-options{display:none!important}
+  .desktop-story-options{display:none!important}
   .mobile-story-selector{display:flex!important;margin-bottom:18px}
   .mobile-story-selector select{font-size:16px;min-height:50px;background:#fff}
   .mobile-story-selector small{font-weight:400;color:var(--muted);font-size:11px;line-height:1.45;margin-top:1px}
