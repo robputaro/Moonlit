@@ -1127,3 +1127,9 @@ html[data-theme='dark'] .print-production-panel{background:linear-gradient(145de
   .mobile-story-selector small{font-weight:400;color:var(--muted);font-size:11px;line-height:1.45;margin-top:1px}
   .mode-toggle{grid-template-columns:1fr 1fr}
 }
+
+/* Moonlit: use dropdown as the only story-option selector */
+.story-form .challenge-grid,
+.story-form .choice-grid {
+  display: none !important;
+}
