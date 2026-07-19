@@ -89,10 +89,43 @@ Requirements:
 - Never shame or frighten the child.
 - Avoid graphic danger, death, weapons, adult themes, or medical claims.
 - Use the child's name naturally without overusing it.
+- Do not output HTML entities, HTML tags, or stray symbol sequences such as "&>" in any reader-visible text.
 - Return only valid JSON matching this structure:
 {"title":"","summary":"","takeaway":"","coverPrompt":"","characterBible":{"name":"","description":"","lockedWardrobe":"","visualAnchor":""},"pages":[{"pageNumber":1,"text":"","illustrationPrompt":""}]}
 - coverPrompt must describe one polished portrait cover scene without title text.
 - Every illustrationPrompt must repeat the child's stable appearance and wardrobe, maintain the selected visual style, describe a single clear scene, and end with: "consistent character design, no text in image."`;
+}
+
+function cleanGeneratedText(value) {
+  if (typeof value !== 'string') return value;
+  return value
+    .replace(/\s*&\s*>\s*/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .trim();
+}
+
+function cleanGeneratedStory(story) {
+  if (!story || typeof story !== 'object') return story;
+  return {
+    ...story,
+    title: cleanGeneratedText(story.title || ''),
+    summary: cleanGeneratedText(story.summary || ''),
+    takeaway: cleanGeneratedText(story.takeaway || ''),
+    coverPrompt: cleanGeneratedText(story.coverPrompt || ''),
+    characterBible: story.characterBible ? {
+      ...story.characterBible,
+      name: cleanGeneratedText(story.characterBible.name || ''),
+      description: cleanGeneratedText(story.characterBible.description || ''),
+      lockedWardrobe: cleanGeneratedText(story.characterBible.lockedWardrobe || ''),
+      visualAnchor: cleanGeneratedText(story.characterBible.visualAnchor || '')
+    } : story.characterBible,
+    pages: Array.isArray(story.pages) ? story.pages.map((page) => ({
+      ...page,
+      text: cleanGeneratedText(page.text || ''),
+      illustrationPrompt: cleanGeneratedText(page.illustrationPrompt || '')
+    })) : story.pages
+  };
 }
 
 function extractJson(text = '') {
@@ -187,8 +220,8 @@ export async function POST(request) {
     else story = demoStory(input);
 
     story.language = input.language || 'en';
-    story.dedication = input.dedication || '';
-    return NextResponse.json(story);
+    story.dedication = cleanGeneratedText(input.dedication || '');
+    return NextResponse.json(cleanGeneratedStory(story));
   } catch (error) {
     console.error('Story route failed:', error);
     return NextResponse.json({ error: 'We could not finish that story this time. Please try again.' }, { status: 500 });

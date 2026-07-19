@@ -48,25 +48,39 @@ const imageLoadingMessages = [
 ];
 
 
-function decodeHtmlEntities(value) {
-  if (typeof value !== 'string' || !value.includes('&')) return value;
+function cleanStoryText(value) {
+  if (typeof value !== 'string') return value;
 
-  // Decode both named and numeric HTML entities without injecting HTML into the page.
-  if (typeof document !== 'undefined') {
-    const textarea = document.createElement('textarea');
-    textarea.innerHTML = value;
-    return textarea.value;
+  let cleaned = value;
+
+  // Decode named and numeric HTML entities without injecting HTML into the page.
+  if (cleaned.includes('&')) {
+    if (typeof document !== 'undefined') {
+      const textarea = document.createElement('textarea');
+      textarea.innerHTML = cleaned;
+      cleaned = textarea.value;
+    } else {
+      cleaned = cleaned
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;|&apos;/g, "'")
+        .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+        .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)));
+    }
   }
 
-  return value
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)));
+  // Remove a malformed literal artifact occasionally returned by the story model.
+  // It is not valid prose or HTML and should never appear in a book.
+  return cleaned
+    .replace(/\s*&\s*>\s*/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .trim();
 }
+
+const decodeHtmlEntities = cleanStoryText;
 
 function decodeStoryEntities(story) {
   if (!story || typeof story !== 'object') return story;
