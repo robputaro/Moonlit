@@ -1139,3 +1139,13 @@ html[data-theme='dark'] .print-production-panel{background:linear-gradient(145de
 .story-option-selector{display:flex!important;margin-bottom:18px}
 .story-option-selector select{font-size:16px;min-height:50px;background:#fff}
 .story-option-selector small{font-weight:400;color:var(--muted);font-size:11px;line-height:1.45;margin-top:4px}
+
+
+/* Optional child photo personalization */
+.photo-personalization{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:4px 0 22px;padding:16px;border:1px dashed rgba(95,84,164,.3);border-radius:16px;background:rgba(95,84,164,.045)}
+.photo-personalization-copy{display:flex;flex-direction:column;gap:5px;max-width:620px}.photo-personalization-copy strong{color:var(--ink);font-size:13px}.photo-personalization-copy p,.photo-personalization-copy small{margin:0;color:var(--muted);line-height:1.45}.photo-personalization-copy p{font-size:12px}.photo-personalization-copy small{font-size:10px}
+.photo-upload-button{display:inline-flex!important;align-items:center;justify-content:center;flex:0 0 auto;min-height:44px;padding:0 16px;border-radius:12px;background:var(--purple);color:#fff!important;font-size:12px!important;font-weight:800!important;cursor:pointer}.photo-upload-button input{display:none}
+.photo-preview-wrap{display:flex;align-items:center;gap:11px;flex:0 0 auto}.photo-preview-wrap img{width:74px;height:74px;border-radius:14px;object-fit:cover;box-shadow:0 8px 22px rgba(42,31,70,.16)}.photo-preview-wrap>div{display:flex;flex-direction:column;align-items:flex-start;gap:7px}.photo-preview-wrap span{max-width:150px;color:#4f8a64;font-size:10px;font-weight:900}.photo-preview-wrap button{padding:0;border:0;background:none;color:var(--purple);font-size:11px;font-weight:800;cursor:pointer}
+.photo-personalization-badge{display:inline-flex;width:max-content;margin-bottom:10px;padding:7px 10px;border-radius:999px;background:rgba(79,138,100,.12);color:#3f7652;font-size:10px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}
+html[data-theme='dark'] .photo-personalization{background:rgba(184,166,239,.07);border-color:rgba(184,166,239,.24)}
+@media(max-width:640px){.photo-personalization{align-items:stretch;flex-direction:column}.photo-upload-button{width:100%;box-sizing:border-box}.photo-preview-wrap{justify-content:flex-start}.photo-preview-wrap img{width:68px;height:68px}}

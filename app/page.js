@@ -160,6 +160,30 @@ async function dataUrlToBlob(dataUrl) {
   return response.blob();
 }
 
+async function prepareReferencePhoto(file) {
+  if (!file?.type?.startsWith('image/')) throw new Error('Choose a JPG, PNG, or WebP image.');
+  if (file.size > 12 * 1024 * 1024) throw new Error('Choose an image smaller than 12 MB.');
+  const source = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = source;
+  });
+  const maxSide = 1400;
+  const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.width * scale));
+  canvas.height = Math.max(1, Math.round(image.height * scale));
+  canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.9);
+}
+
 
 const emptyForm = {
   childName: '',
@@ -210,6 +234,9 @@ export default function Home() {
   const [coverExporting, setCoverExporting] = useState(false);
   const [coverSpec, setCoverSpec] = useState({ totalWidth: '19.00', totalHeight: '10.25', spineWidth: '0.25' });
   const [backCoverBlurb, setBackCoverBlurb] = useState('');
+  const [referencePhoto, setReferencePhoto] = useState('');
+  const [referencePhotoAnalysis, setReferencePhotoAnalysis] = useState(null);
+  const [photoAnalyzing, setPhotoAnalyzing] = useState(false);
 
   const progress = useMemo(() => {
     if (step === 'create') return 1;
@@ -358,6 +385,9 @@ export default function Home() {
       storyData.coverImagePath = storyData.coverImagePath || row.cover_path;
       storyData.coverImageUrl = await signedAssetUrl(storyData.coverImagePath);
     }
+    if (storyData.referencePhotoPath) {
+      storyData.referencePhotoUrl = await signedAssetUrl(storyData.referencePhotoPath);
+    }
     storyData.pages = await Promise.all((storyData.pages || []).map(async (page) => ({
       ...page,
       imageUrl: page.imagePath ? await signedAssetUrl(page.imagePath) : ''
@@ -395,6 +425,12 @@ export default function Home() {
       cloudStory.coverImagePath = await uploadStoryAsset(`${basePath}/cover.png`, cloudStory.coverImageUrl);
     }
     cloudStory.coverImageUrl = '';
+
+    const referenceSource = cloudStory.referencePhotoUrl || referencePhoto;
+    if (referenceSource?.startsWith('data:image')) {
+      cloudStory.referencePhotoPath = await uploadStoryAsset(`${basePath}/reference-child.jpg`, referenceSource);
+    }
+    cloudStory.referencePhotoUrl = '';
 
     cloudStory.pages = await Promise.all((cloudStory.pages || []).map(async (page, index) => {
       const next = { ...page };
@@ -460,6 +496,45 @@ export default function Home() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  async function analyzeReferencePhoto(photoData = referencePhoto) {
+    if (!photoData) return null;
+    setPhotoAnalyzing(true);
+    try {
+      const response = await authenticatedFetch('/api/analyze-reference', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageData: photoData, childName: form.childName, age: form.age })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Photo analysis failed.');
+      setReferencePhotoAnalysis(data.profile);
+      return data.profile;
+    } finally {
+      setPhotoAnalyzing(false);
+    }
+  }
+
+  async function handleReferencePhoto(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setError('');
+    try {
+      const prepared = await prepareReferencePhoto(file);
+      setReferencePhoto(prepared);
+      setReferencePhotoAnalysis(null);
+      await analyzeReferencePhoto(prepared);
+    } catch (photoError) {
+      setError(photoError.message || 'Moonlit could not use that photo.');
+    } finally {
+      event.target.value = '';
+    }
+  }
+
+  function removeReferencePhoto() {
+    setReferencePhoto('');
+    setReferencePhotoAnalysis(null);
+  }
+
   async function generateStory(event) {
     event.preventDefault();
     if (supabaseConfigured && !user) {
@@ -469,16 +544,21 @@ export default function Home() {
     setLoading(true);
     setError('');
     try {
+      const activePhotoAnalysis = referencePhoto
+        ? (referencePhotoAnalysis || await analyzeReferencePhoto(referencePhoto))
+        : null;
       const generationInput = form.storyMode === 'Fun'
         ? {
             ...form,
             challenge: '',
             emotionalOutcome: '',
-            storyMode: 'Fun'
+            storyMode: 'Fun',
+            referencePhotoAnalysis: activePhotoAnalysis
           }
         : {
             ...form,
-            storyMode: 'Challenge'
+            storyMode: 'Challenge',
+            referencePhotoAnalysis: activePhotoAnalysis
           };
 
       const response = await authenticatedFetch('/api/generate', {
@@ -488,7 +568,7 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Story generation failed.');
-      setStory(decodeStoryEntities({ ...data, language: generationInput.language || 'en', dedication: generationInput.dedication || '' }));
+      setStory(decodeStoryEntities({ ...data, language: generationInput.language || 'en', dedication: generationInput.dedication || '', referencePhotoUrl: referencePhoto || '', referencePhotoAnalysis: activePhotoAnalysis }));
       setStoryId(null);
       setStep('review');
       setPageIndex(0);
@@ -527,6 +607,8 @@ export default function Home() {
           storyTitle: story.title,
           style: form.style,
           characterBible: story.characterBible,
+          referencePhoto: story.referencePhotoUrl || referencePhoto || '',
+          referencePhotoAnalysis: story.referencePhotoAnalysis || referencePhotoAnalysis,
           page
         })
       });
@@ -558,6 +640,8 @@ export default function Home() {
           storyTitle: story.title,
           style: form.style,
           characterBible: story.characterBible,
+          referencePhoto: story.referencePhotoUrl || referencePhoto || '',
+          referencePhotoAnalysis: story.referencePhotoAnalysis || referencePhotoAnalysis,
           page: { coverPrompt: story.coverPrompt || story.pages?.[0]?.illustrationPrompt }
         })
       });
@@ -658,6 +742,8 @@ export default function Home() {
   function loadSavedStory(record, targetStep = 'review') {
     setStory(decodeStoryEntities(record.story));
     setForm({ ...emptyForm, ...(record.form || {}) });
+    setReferencePhoto(record.story?.referencePhotoUrl || '');
+    setReferencePhotoAnalysis(record.story?.referencePhotoAnalysis || null);
     setStoryId(record.id);
     setPageIndex(0);
     setStep(targetStep);
@@ -1263,6 +1349,22 @@ export default function Home() {
                 <label>Pronouns<select value={form.pronouns} onChange={(e) => update('pronouns', e.target.value)}><option value="use-name">Use child's name only</option><option value="he/him">He/him</option><option value="she/her">She/her</option><option value="they/them">They/them</option></select></label>
                 <label>Appearance <span className="optional">optional</span><input value={form.appearance} onChange={(e) => update('appearance', e.target.value)} placeholder="Curly brown hair, green pajamas" /></label>
               </div>
+              <div className={`photo-personalization ${referencePhoto ? 'has-photo' : ''}`}>
+                <div className="photo-personalization-copy">
+                  <strong>Make the character feel more like your child <span className="optional">optional</span></strong>
+                  <p>Upload one clear photo to inspire the illustrated character’s hair, features, age, and overall look.</p>
+                  <small>Moonlit creates a storybook-inspired likeness, not an exact portrait. Use a photo you have permission to upload.</small>
+                </div>
+                {referencePhoto ? (
+                  <div className="photo-preview-wrap">
+                    <img src={referencePhoto} alt="Child reference preview" />
+                    <div><span>{photoAnalyzing ? 'Reading visual details…' : referencePhotoAnalysis ? 'Photo personalization enabled' : 'Photo ready'}</span><button type="button" onClick={removeReferencePhoto}>Remove</button></div>
+                  </div>
+                ) : (
+                  <label className="photo-upload-button">Upload a photo<input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleReferencePhoto} /></label>
+                )}
+              </div>
+
               <div className="field-grid two language-fields">
                 <label>Book language<select value={form.language} onChange={(e) => update('language', e.target.value)}><option value="en">English</option><option value="es">Español</option><option value="en-es">English + Español</option></select></label>
                 <label>Dedication <span className="optional">optional</span><input value={form.dedication} onChange={(e) => update('dedication', e.target.value)} placeholder="For August, with all our love — Grandma and Grandpa" /></label>
@@ -1331,6 +1433,7 @@ export default function Home() {
         {step === 'review' && story && (
           <section className="review-layout">
             <div className="review-header">
+              {story.referencePhotoAnalysis && <div className="photo-personalization-badge">Photo-personalized character</div>}
               <div><div className="eyebrow">Your story draft</div><h1>{decodeHtmlEntities(story.title)}</h1><p>{decodeHtmlEntities(story.summary)}</p></div>
               <div className="header-actions"><button className="ghost" onClick={() => setStep('create')}>Edit setup</button><button className="ghost" onClick={generateCover} disabled={coverLoading}>{coverLoading ? 'Creating cover…' : story.coverImageUrl ? 'Regenerate cover' : 'Generate cover'}</button><button className="ghost" onClick={generateAllImages} disabled={generatingAll}>{generatingAll ? 'Illustrating pages…' : 'Generate all images'}</button><button className="primary-small" onClick={() => setStep('read')}>Open storybook →</button></div>
             </div>
@@ -1424,7 +1527,7 @@ export default function Home() {
           <section className="library-view">
             <div className="library-header">
               <div><div className="eyebrow">Your Moonlit shelf</div><h1>My Stories</h1><p>Your books are saved to your account and available wherever you sign in.</p></div>
-              <button className="primary-small" onClick={() => { setStory(null); setStoryId(null); setForm(emptyForm); setStep('create'); }}>Create a new story</button>
+              <button className="primary-small" onClick={() => { setStory(null); setStoryId(null); setForm(emptyForm); setReferencePhoto(''); setReferencePhotoAnalysis(null); setStep('create'); }}>Create a new story</button>
             </div>
             {error && <div className="error">{error}</div>}
             {libraryLoading ? (

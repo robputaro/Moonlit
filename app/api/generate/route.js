@@ -70,7 +70,9 @@ Do not mention, imply, reuse, or resolve any childhood challenge, milestone, pac
 
 Child: ${input.childName}
 ${pronounInstruction(input.pronouns)}
-Appearance: ${input.appearance || 'not specified'}
+Appearance notes from family: ${input.appearance || 'not specified'}
+Photo-derived visual profile: ${input.referencePhotoAnalysis ? JSON.stringify(input.referencePhotoAnalysis) : 'no reference photo supplied'}
+When a photo-derived profile is supplied, use it as the primary visual reference while keeping the result stylized, child-friendly, and non-photorealistic. Do not infer sensitive traits or identity.
 Book language: ${input.language || 'en'}
 ${languageInstruction(input.language)}
 Dedication supplied by the family: ${input.dedication || 'none'}
