@@ -1091,3 +1091,6 @@ button:focus-visible, a:focus-visible { outline: none; box-shadow: var(--ml-focu
     display: none !important;
   }
 }
+
+/* Reader save confirmation */
+.reader-toolbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}.reader-save-status{color:var(--ml-primary,var(--purple));font-size:12px;font-weight:800}.reader-toolbar-actions button:disabled{opacity:.62;cursor:wait}@media(max-width:620px){.reader-toolbar-actions{margin-left:auto}.reader-save-status{width:100%;text-align:right}}
