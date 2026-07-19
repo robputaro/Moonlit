@@ -1133,3 +1133,9 @@ html[data-theme='dark'] .print-production-panel{background:linear-gradient(145de
 .story-form .choice-grid {
   display: none !important;
 }
+
+
+/* Unified story option selector: one dropdown on every screen size. */
+.story-option-selector{display:flex!important;margin-bottom:18px}
+.story-option-selector select{font-size:16px;min-height:50px;background:#fff}
+.story-option-selector small{font-weight:400;color:var(--muted);font-size:11px;line-height:1.45;margin-top:4px}

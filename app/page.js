@@ -1278,14 +1278,7 @@ export default function Home() {
 
               {form.storyMode === 'Challenge' ? (
                 <>
-                  <div className="challenge-grid desktop-story-options">
-                    {challenges.map(([name, description]) => (
-                      <button type="button" key={name} className={`choice ${form.challenge === name ? 'selected' : ''}`} onClick={() => update('challenge', name)}>
-                        <strong>{name}</strong><small>{description}</small>
-                      </button>
-                    ))}
-                  </div>
-                  <label className="mobile-story-selector">What is your child working through?
+                  <label className="story-option-selector">What is your child working through?
                     <select value={form.challenge} onChange={(e) => update('challenge', e.target.value)}>
                       {challenges.map(([name]) => <option value={name} key={name}>{name}</option>)}
                     </select>
@@ -1299,14 +1292,7 @@ export default function Home() {
                 </>
               ) : (
                 <>
-                  <div className="choice-grid desktop-story-options">
-                    {funModes.map(([name, description]) => (
-                      <button type="button" key={name} className={`choice ${form.theme === name ? 'selected' : ''}`} onClick={() => update('theme', name)}>
-                        <strong>{name}</strong><small>{description}</small>
-                      </button>
-                    ))}
-                  </div>
-                  <label className="mobile-story-selector">What kind of story should this be?
+                  <label className="story-option-selector">What kind of story should this be?
                     <select value={form.theme} onChange={(e) => update('theme', e.target.value)}>
                       {funModes.map(([name]) => <option value={name} key={name}>{name}</option>)}
                     </select>
