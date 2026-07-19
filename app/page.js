@@ -613,155 +613,159 @@ export default function Home() {
     await refreshLibrary();
   }
 
-  function printStory() {
+  async function printStory() {
     if (!story) return;
 
-    const escapeHtml = (value = '') => String(value)
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#039;');
-
-    const coverImage = story.coverImageUrl
-      ? `<img class="cover-art" src="${escapeHtml(story.coverImageUrl)}" alt="" />`
-      : `<div class="missing-art">Cover illustration not generated</div>`;
-
-    const cover = `
-      <section class="sheet cover-sheet">
-        ${coverImage}
-        <div class="cover-shade"></div>
-        <div class="cover-copy">
-          <div class="kicker">A Moonlit Story</div>
-          <h1>${escapeHtml(story.title)}</h1>
-          ${story.summary ? `<p>${escapeHtml(story.summary)}</p>` : ''}
-        </div>
-      </section>`;
-
-    const pages = story.pages.map((page, index) => {
-      const image = page.imageUrl
-        ? `<img src="${escapeHtml(page.imageUrl)}" alt="" />`
-        : `<div class="missing-art">Illustration not generated</div>`;
-
-      return `
-        <section class="sheet story-sheet">
-          <div class="art-frame">${image}</div>
-          <div class="story-copy">
-            <div class="page-label">${escapeHtml(story.title)} · ${index + 1}</div>
-            <p>${escapeHtml(page.text)}</p>
-          </div>
-        </section>`;
-    }).join('');
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
+    const previewWindow = window.open('', '_blank');
+    if (!previewWindow) {
       setError('Your browser blocked the PDF window. Allow pop-ups for Moonlit and try again.');
       return;
     }
 
-    printWindow.document.open();
-    printWindow.document.write(`<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(story.title)} · Moonlit</title>
-  <style>
-    @page { size: letter portrait; margin: 0; }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; background: #fff; color: #27213b; }
-    body { font-family: Georgia, 'Times New Roman', serif; }
-    .sheet {
-      position: relative;
-      width: 8.5in;
-      height: 10.98in;
-      margin: 0 auto;
-      overflow: hidden;
-      background: #fffdf8;
-      break-after: page;
-      page-break-after: always;
-      break-inside: avoid;
-      page-break-inside: avoid;
+    previewWindow.document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preparing PDF…</title><style>body{margin:0;display:grid;place-items:center;min-height:100vh;background:#171229;color:#fff;font:600 16px system-ui}div{text-align:center;padding:28px}.dot{display:inline-block;animation:pulse 1s infinite alternate}@keyframes pulse{to{opacity:.35}}</style></head><body><div>Preparing your storybook PDF<span class="dot">…</span></div></body></html>`);
+    previewWindow.document.close();
+
+    try {
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter', compress: true });
+      const PAGE_W = 612;
+      const PAGE_H = 792;
+      const SAFE = 36;
+
+      const fetchDataUrl = async (url) => {
+        if (!url) return null;
+        if (url.startsWith('data:')) return url;
+        const response = await fetch(url, { mode: 'cors', credentials: 'omit' });
+        if (!response.ok) throw new Error(`Image request failed (${response.status})`);
+        const blob = await response.blob();
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      };
+
+      const drawCoverImage = (dataUrl, x, y, width, height) => {
+        const props = pdf.getImageProperties(dataUrl);
+        const sourceRatio = props.width / props.height;
+        const frameRatio = width / height;
+        let drawW;
+        let drawH;
+        let drawX;
+        let drawY;
+        if (sourceRatio > frameRatio) {
+          drawH = height;
+          drawW = height * sourceRatio;
+          drawX = x - (drawW - width) / 2;
+          drawY = y;
+        } else {
+          drawW = width;
+          drawH = width / sourceRatio;
+          drawX = x;
+          drawY = y - (drawH - height) / 2;
+        }
+        pdf.addImage(dataUrl, 'JPEG', drawX, drawY, drawW, drawH, undefined, 'FAST');
+      };
+
+      const drawContainedImage = (dataUrl, x, y, width, height) => {
+        const props = pdf.getImageProperties(dataUrl);
+        const ratio = Math.min(width / props.width, height / props.height);
+        const drawW = props.width * ratio;
+        const drawH = props.height * ratio;
+        pdf.addImage(dataUrl, 'JPEG', x + (width - drawW) / 2, y + (height - drawH) / 2, drawW, drawH, undefined, 'FAST');
+      };
+
+      // Cover page
+      pdf.setFillColor(23, 18, 41);
+      pdf.rect(0, 0, PAGE_W, PAGE_H, 'F');
+      let coverData = null;
+      try { coverData = await fetchDataUrl(story.coverImageUrl); } catch (imageError) { console.warn('Cover image could not be loaded for PDF:', imageError); }
+      if (coverData) {
+        drawCoverImage(coverData, 0, 0, PAGE_W, PAGE_H);
+        pdf.setFillColor(23, 18, 41);
+        pdf.rect(0, PAGE_H * 0.62, PAGE_W, PAGE_H * 0.38, 'F');
+      } else {
+        pdf.setFillColor(91, 75, 159);
+        pdf.circle(PAGE_W / 2, 245, 110, 'F');
+      }
+
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setCharSpace(1.8);
+      pdf.text('A MOONLIT STORY', SAFE + 8, 590);
+      pdf.setCharSpace(0);
+      pdf.setFont('times', 'bold');
+      pdf.setFontSize(31);
+      const titleLines = pdf.splitTextToSize(story.title || 'Moonlit Story', PAGE_W - (SAFE + 8) * 2);
+      pdf.text(titleLines, SAFE + 8, 625, { lineHeightFactor: 1.03 });
+      const titleBottom = 625 + titleLines.length * 32;
+      if (story.summary) {
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(10.5);
+        pdf.setTextColor(238, 234, 247);
+        const summaryLines = pdf.splitTextToSize(story.summary, PAGE_W - (SAFE + 8) * 2);
+        pdf.text(summaryLines.slice(0, 4), SAFE + 8, Math.min(titleBottom + 10, 742), { lineHeightFactor: 1.35 });
+      }
+
+      // Interior pages: one explicit PDF page each — no browser pagination involved.
+      for (let index = 0; index < story.pages.length; index += 1) {
+        const page = story.pages[index];
+        pdf.addPage('letter', 'portrait');
+        pdf.setFillColor(255, 252, 246);
+        pdf.rect(0, 0, PAGE_W, PAGE_H, 'F');
+
+        const artX = SAFE;
+        const artY = SAFE;
+        const artW = PAGE_W - SAFE * 2;
+        const artH = 500;
+        pdf.setFillColor(239, 234, 247);
+        pdf.roundedRect(artX, artY, artW, artH, 10, 10, 'F');
+
+        let pageData = null;
+        try { pageData = await fetchDataUrl(page.imageUrl); } catch (imageError) { console.warn(`Page ${index + 1} image could not be loaded for PDF:`, imageError); }
+        if (pageData) {
+          drawContainedImage(pageData, artX + 8, artY + 8, artW - 16, artH - 16);
+        } else {
+          pdf.setTextColor(113, 104, 135);
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(11);
+          pdf.text('Illustration not generated', PAGE_W / 2, artY + artH / 2, { align: 'center' });
+        }
+
+        pdf.setTextColor(111, 97, 170);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(7.5);
+        pdf.setCharSpace(1.2);
+        pdf.text(`${String(story.title || '').toUpperCase()} · ${index + 1}`, PAGE_W / 2, 566, { align: 'center', maxWidth: PAGE_W - 96 });
+        pdf.setCharSpace(0);
+
+        pdf.setTextColor(39, 33, 59);
+        pdf.setFont('times', 'normal');
+        pdf.setFontSize(14);
+        const storyLines = pdf.splitTextToSize(page.text || '', PAGE_W - 104);
+        const maxLines = 10;
+        const visibleLines = storyLines.slice(0, maxLines);
+        const lineHeight = 19;
+        const blockHeight = visibleLines.length * lineHeight;
+        const textY = Math.max(606, 650 - blockHeight / 2);
+        pdf.text(visibleLines, PAGE_W / 2, textY, { align: 'center', lineHeightFactor: 1.35, maxWidth: PAGE_W - 104 });
+      }
+
+      const safeName = String(story.title || 'moonlit-story')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'moonlit-story';
+      const blob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(blob);
+      previewWindow.location.replace(blobUrl);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+    } catch (pdfError) {
+      console.error(pdfError);
+      previewWindow.close();
+      setError(`We could not create the PDF: ${pdfError.message || 'Unknown error'}`);
     }
-    .sheet:last-child { break-after: auto; page-break-after: auto; }
-    .cover-sheet { background: #171229; }
-    .cover-art { display: block; width: 100%; height: 100%; object-fit: cover; }
-    .cover-shade {
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(180deg, transparent 35%, rgba(18, 13, 35, .30) 58%, #171229 100%);
-    }
-    .cover-copy {
-      position: absolute;
-      left: .62in;
-      right: .62in;
-      bottom: .62in;
-      color: white;
-    }
-    .kicker, .page-label {
-      font-family: Arial, sans-serif;
-      text-transform: uppercase;
-      letter-spacing: .14em;
-      font-size: 8pt;
-      font-weight: 700;
-    }
-    .cover-copy h1 { margin: .13in 0 .12in; font-size: 34pt; line-height: 1.04; }
-    .cover-copy p { max-width: 6.2in; margin: 0; font-size: 12pt; line-height: 1.45; opacity: .92; }
-    .story-sheet {
-      padding: .42in .48in .46in;
-      display: grid;
-      grid-template-rows: 7.15in minmax(0, 1fr);
-      gap: .20in;
-    }
-    .art-frame {
-      width: 100%;
-      height: 7.15in;
-      overflow: hidden;
-      border-radius: .12in;
-      background: #eee9f6;
-    }
-    .art-frame img { display: block; width: 100%; height: 100%; object-fit: cover; }
-    .missing-art { width: 100%; height: 100%; display: grid; place-items: center; color: #746d82; font: 11pt Arial, sans-serif; }
-    .story-copy {
-      min-height: 0;
-      padding: .04in .36in 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      text-align: center;
-      overflow: hidden;
-    }
-    .page-label { color: #6f61aa; margin-bottom: .10in; }
-    .story-copy p {
-      width: 100%;
-      max-width: 6.7in;
-      margin: 0;
-      font-size: 14pt;
-      line-height: 1.36;
-      overflow-wrap: break-word;
-    }
-    @media screen {
-      body { background: #24212c; padding: 24px 0; }
-      .sheet { margin-bottom: 24px; box-shadow: 0 14px 50px rgba(0,0,0,.28); }
-    }
-    @media print {
-      html, body { width: 8.5in; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .sheet { margin: 0; box-shadow: none; }
-    }
-  </style>
-</head>
-<body>${cover}${pages}
-<script>
-  const images = Array.from(document.images);
-  Promise.all(images.map((img) => img.complete
-    ? Promise.resolve()
-    : new Promise((resolve) => { img.onload = resolve; img.onerror = resolve; })
-  )).then(() => setTimeout(() => window.print(), 350));
-<\/script>
-</body>
-</html>`);
-    printWindow.document.close();
   }
 
   return (
