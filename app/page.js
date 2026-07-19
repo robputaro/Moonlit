@@ -149,6 +149,7 @@ export default function Home() {
   const [localImportCount, setLocalImportCount] = useState(0);
   const [importingStories, setImportingStories] = useState(false);
   const [theme, setTheme] = useState('light');
+  const [keepsakeExporting, setKeepsakeExporting] = useState(false);
 
   const progress = useMemo(() => {
     if (step === 'create') return 1;
@@ -792,6 +793,198 @@ export default function Home() {
     }
   }
 
+
+  async function exportKeepsakePdf() {
+    if (!story || keepsakeExporting) return;
+    setKeepsakeExporting(true);
+    setError('');
+
+    try {
+      const { jsPDF } = await import('jspdf');
+      const PAGE = 594; // 8.25 inches at 72 pt/in: 8x8 trim plus 0.125in bleed on every edge.
+      const TRIM_INSET = 9;
+      const SAFE = 42;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: [PAGE, PAGE], compress: true });
+
+      const fetchDataUrl = async (url) => {
+        if (!url) return null;
+        if (url.startsWith('data:')) return url;
+        const response = await fetch(url, { mode: 'cors', credentials: 'omit' });
+        if (!response.ok) throw new Error(`Image request failed (${response.status})`);
+        const blob = await response.blob();
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      };
+
+      const drawCoverCrop = (dataUrl, x, y, width, height) => {
+        const props = pdf.getImageProperties(dataUrl);
+        const sourceRatio = props.width / props.height;
+        const frameRatio = width / height;
+        let drawW = width;
+        let drawH = height;
+        let drawX = x;
+        let drawY = y;
+        if (sourceRatio > frameRatio) {
+          drawH = height;
+          drawW = height * sourceRatio;
+          drawX = x - (drawW - width) / 2;
+        } else {
+          drawW = width;
+          drawH = width / sourceRatio;
+          drawY = y - (drawH - height) / 2;
+        }
+        pdf.addImage(dataUrl, 'JPEG', drawX, drawY, drawW, drawH, undefined, 'FAST');
+      };
+
+      const addPaper = () => {
+        pdf.setFillColor(255, 252, 246);
+        pdf.rect(0, 0, PAGE, PAGE, 'F');
+      };
+
+      const addMoon = (y = PAGE - 66) => {
+        pdf.setTextColor(111, 97, 170);
+        pdf.setFont('times', 'normal');
+        pdf.setFontSize(24);
+        pdf.text('☾', PAGE / 2, y, { align: 'center' });
+      };
+
+      const addPage = () => {
+        pdf.addPage([PAGE, PAGE], 'portrait');
+        addPaper();
+      };
+
+      // Interior page 1: half title.
+      addPaper();
+      pdf.setTextColor(111, 97, 170);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setCharSpace(1.7);
+      pdf.text('A MOONLIT KEEPSAKE', PAGE / 2, 180, { align: 'center' });
+      pdf.setCharSpace(0);
+      pdf.setTextColor(39, 33, 59);
+      pdf.setFont('times', 'bold');
+      pdf.setFontSize(29);
+      const titleLines = pdf.splitTextToSize(story.title || 'Moonlit Story', PAGE - SAFE * 2);
+      pdf.text(titleLines, PAGE / 2, 230, { align: 'center', lineHeightFactor: 1.08 });
+      addMoon(420);
+
+      // Interior page 2: dedication / created-for page.
+      addPage();
+      pdf.setTextColor(111, 97, 170);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setCharSpace(1.5);
+      pdf.text('CREATED ESPECIALLY FOR', PAGE / 2, 170, { align: 'center' });
+      pdf.setCharSpace(0);
+      pdf.setTextColor(39, 33, 59);
+      pdf.setFont('times', 'bold');
+      pdf.setFontSize(28);
+      pdf.text(story.characterBible?.name || form.childName || 'You', PAGE / 2, 218, { align: 'center' });
+      const dedication = story.dedication || form.dedication;
+      if (dedication) {
+        pdf.setFont('times', 'italic');
+        pdf.setFontSize(17);
+        const lines = pdf.splitTextToSize(dedication, PAGE - 140);
+        pdf.text(lines.slice(0, 9), PAGE / 2, 310, { align: 'center', lineHeightFactor: 1.45 });
+      }
+      addMoon(470);
+
+      // Each scene becomes a true picture-book spread: full-art page followed by a calm text page.
+      for (let index = 0; index < story.pages.length; index += 1) {
+        const scene = story.pages[index];
+        addPage();
+        let pageData = null;
+        try { pageData = await fetchDataUrl(scene.imageUrl); } catch (imageError) { console.warn(`Keepsake page ${index + 1} image could not be loaded:`, imageError); }
+        if (pageData) {
+          drawCoverCrop(pageData, 0, 0, PAGE, PAGE);
+        } else {
+          pdf.setFillColor(239, 234, 247);
+          pdf.rect(0, 0, PAGE, PAGE, 'F');
+          pdf.setTextColor(98, 89, 122);
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(13);
+          pdf.text(`Illustration ${index + 1} has not been generated`, PAGE / 2, PAGE / 2, { align: 'center' });
+        }
+
+        addPage();
+        pdf.setDrawColor(223, 215, 235);
+        pdf.setLineWidth(1);
+        pdf.roundedRect(TRIM_INSET + 20, TRIM_INSET + 20, PAGE - (TRIM_INSET + 20) * 2, PAGE - (TRIM_INSET + 20) * 2, 12, 12, 'S');
+        pdf.setTextColor(111, 97, 170);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(7.5);
+        pdf.setCharSpace(1.2);
+        pdf.text(`${String(story.title || '').toUpperCase()} · ${index + 1}`, PAGE / 2, 105, { align: 'center', maxWidth: PAGE - SAFE * 2 });
+        pdf.setCharSpace(0);
+        pdf.setTextColor(39, 33, 59);
+        pdf.setFont('times', 'normal');
+        const bilingual = (story.language || form.language) === 'en-es';
+        pdf.setFontSize(bilingual ? 15.5 : 18);
+        const maxWidth = PAGE - 130;
+        const lines = pdf.splitTextToSize(scene.text || '', maxWidth);
+        const lineHeight = bilingual ? 22 : 26;
+        const blockHeight = Math.min(lines.length, bilingual ? 15 : 12) * lineHeight;
+        const startY = Math.max(180, (PAGE - blockHeight) / 2 + 16);
+        pdf.text(lines.slice(0, bilingual ? 15 : 12), PAGE / 2, startY, { align: 'center', lineHeightFactor: bilingual ? 1.38 : 1.42, maxWidth });
+        addMoon(505);
+      }
+
+      // Closing page.
+      addPage();
+      pdf.setTextColor(111, 97, 170);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setCharSpace(1.4);
+      pdf.text('THE END', PAGE / 2, 190, { align: 'center' });
+      pdf.setCharSpace(0);
+      pdf.setTextColor(39, 33, 59);
+      pdf.setFont('times', 'italic');
+      pdf.setFontSize(18);
+      const takeawayLines = pdf.splitTextToSize(story.takeaway || 'Every story leaves a little light behind.', PAGE - 150);
+      pdf.text(takeawayLines.slice(0, 8), PAGE / 2, 270, { align: 'center', lineHeightFactor: 1.45 });
+      addMoon(440);
+
+      // Creation / rights page.
+      addPage();
+      pdf.setTextColor(111, 97, 170);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setCharSpace(1.3);
+      pdf.text('MADE WITH MOONLIT', PAGE / 2, 250, { align: 'center' });
+      pdf.setCharSpace(0);
+      pdf.setTextColor(76, 68, 94);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      const languageLabel = (story.language || form.language) === 'es' ? 'Español' : (story.language || form.language) === 'en-es' ? 'English + Español' : 'English';
+      pdf.text(`Personalized story · ${languageLabel}`, PAGE / 2, 286, { align: 'center' });
+      pdf.text('Please review every page before ordering a physical copy.', PAGE / 2, 310, { align: 'center' });
+      addMoon(390);
+
+      // Bound books are assembled in signatures. Normalize the proof to a multiple of four pages.
+      const totalPages = pdf.getNumberOfPages();
+      const normalizedTotal = Math.max(16, Math.ceil(totalPages / 4) * 4);
+      while (pdf.getNumberOfPages() < normalizedTotal) {
+        addPage();
+        addMoon(PAGE / 2 + 8);
+      }
+
+      const safeName = String(story.title || 'moonlit-story')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'moonlit-story';
+      pdf.save(`${safeName}-8x8-keepsake-interior.pdf`);
+    } catch (pdfError) {
+      console.error(pdfError);
+      setError(`We could not create the 8×8 keepsake PDF: ${pdfError.message || 'Unknown error'}`);
+    } finally {
+      setKeepsakeExporting(false);
+    }
+  }
+
   return (
     <main>
       <header className="site-header">
@@ -963,7 +1156,16 @@ export default function Home() {
                 </article>
               ))}
             </div>
-            <div className="sticky-actions"><span className="save-status">{saveMessage}</span><button className="ghost" onClick={saveToLibrary}>Save to My Stories</button><button className="ghost" onClick={printStory}>Print / Save PDF</button><button className="primary-small" onClick={() => setStep('read')}>Read the story →</button></div>
+            <aside className="print-readiness-card">
+              <div><span className="print-readiness-kicker">8×8 keepsake readiness</span><strong>{story.coverImageUrl && story.pages.every((page) => page.imageUrl) ? 'Ready for a proof export' : 'A few items still need attention'}</strong></div>
+              <ul>
+                <li className={story.coverImageUrl ? 'ready' : 'warning'}>{story.coverImageUrl ? 'Cover artwork generated' : 'Generate the cover artwork'}</li>
+                <li className={story.pages.every((page) => page.imageUrl) ? 'ready' : 'warning'}>{story.pages.filter((page) => page.imageUrl).length} of {story.pages.length} interior illustrations generated</li>
+                <li className={(story.language || form.language) === 'en-es' ? 'note' : 'ready'}>{(story.language || form.language) === 'en-es' ? 'Bilingual text uses the compact keepsake layout' : 'Single-language text has standard print spacing'}</li>
+                <li className={story.pages.length === 10 ? 'ready' : 'note'}>{story.pages.length === 10 ? '10 scenes create a natural 24-page keepsake' : `${story.pages.length} scenes will be normalized to a multiple-of-four page count`}</li>
+              </ul>
+            </aside>
+            <div className="sticky-actions"><span className="save-status">{saveMessage}</span><button className="ghost" onClick={saveToLibrary}>Save to My Stories</button><button className="ghost" onClick={printStory}>Digital PDF</button><button className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building 8×8…' : '8×8 Keepsake PDF'}</button><button className="primary-small" onClick={() => setStep('read')}>Read the story →</button></div>
           </section>
         )}
 
@@ -1004,7 +1206,8 @@ export default function Home() {
             <div className="reader-toolbar"><button onClick={() => setStep('review')}>← Back to edit</button><span>{pageIndex + 1} / {story.pages.length}</span><div className="reader-toolbar-actions">
                 {saveMessage && <span className="reader-save-status" role="status">{saveMessage}</span>}
                 <button type="button" onClick={saveToLibrary} disabled={saveMessage === 'Saving…'}>{saveMessage === 'Saving…' ? 'Saving…' : saveMessage ? 'Saved ✓' : 'Save'}</button>
-                <button type="button" onClick={printStory}>PDF</button>
+                <button type="button" onClick={printStory}>Digital PDF</button>
+                <button type="button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building…' : '8×8 PDF'}</button>
               </div></div>
             {story.coverImageUrl && (
               <div className="reader-cover-strip">
