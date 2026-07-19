@@ -378,6 +378,17 @@ export default function Home() {
     }
   }
 
+  function selectStoryMode(mode) {
+    setForm((current) => ({
+      ...current,
+      storyMode: mode,
+      storyIdea: '',
+      ...(mode === 'Fun'
+        ? { challenge: '', emotionalOutcome: '', theme: current.theme || 'Adventure' }
+        : { challenge: current.challenge || 'Giving up the pacifier', emotionalOutcome: current.emotionalOutcome || 'Brave' })
+    }));
+  }
+
   function update(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
   }
@@ -391,10 +402,22 @@ export default function Home() {
     setLoading(true);
     setError('');
     try {
+      const generationInput = form.storyMode === 'Fun'
+        ? {
+            ...form,
+            challenge: '',
+            emotionalOutcome: '',
+            storyMode: 'Fun'
+          }
+        : {
+            ...form,
+            storyMode: 'Challenge'
+          };
+
       const response = await authenticatedFetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body: JSON.stringify(generationInput)
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Story generation failed.');
@@ -648,8 +671,8 @@ export default function Home() {
               <div className="divider"></div>
               <div className="section-heading"><span>2</span><div><h2>What is your child working through?</h2><p>Choose a real moment, or switch to a story made purely for fun.</p></div></div>
               <div className="mode-toggle">
-                <button type="button" className={form.storyMode === 'Challenge' ? 'active' : ''} onClick={() => update('storyMode', 'Challenge')}>Challenge story</button>
-                <button type="button" className={form.storyMode === 'Fun' ? 'active' : ''} onClick={() => update('storyMode', 'Fun')}>Just for fun</button>
+                <button type="button" className={form.storyMode === 'Challenge' ? 'active' : ''} onClick={() => selectStoryMode('Challenge')}>Challenge story</button>
+                <button type="button" className={form.storyMode === 'Fun' ? 'active' : ''} onClick={() => selectStoryMode('Fun')}>Just for fun</button>
               </div>
 
               {form.storyMode === 'Challenge' ? (

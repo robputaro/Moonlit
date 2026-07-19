@@ -44,18 +44,28 @@ function pronounInstruction(value) {
 }
 
 function buildPrompt(input) {
+  const isChallenge = input.storyMode === 'Challenge';
+  const modeContext = isChallenge
+    ? `This is a CHALLENGE STORY.
+Current challenge: ${input.challenge || 'a parent-described growing moment'}
+Desired emotional outcome: ${input.emotionalOutcome || 'safe and supported'}
+Parent context: ${input.storyIdea || 'none provided'}
+
+Use imaginative metaphor rather than lecturing. Reflect the challenge gently, normalize mixed feelings, model one or two practical coping actions, and end with the selected emotional outcome. Do not promise the challenge will instantly disappear.`
+    : `This is a JUST-FOR-FUN STORY.
+Theme: ${input.theme || 'Adventure'}
+Parent story idea: ${input.storyIdea || 'Create a playful original adventure.'}
+
+Do not mention, imply, reuse, or resolve any childhood challenge, milestone, pacifier transition, emotional struggle, or prior challenge selection unless the parent explicitly included it in the fun-story idea.`;
+
   return `You are a thoughtful children's storybook author. Create a safe, warm, age-appropriate personalized story for a ${input.age}-year-old child.
 
 Child: ${input.childName}
 ${pronounInstruction(input.pronouns)}
 Appearance: ${input.appearance || 'not specified'}
-Story mode: ${input.storyMode || 'Challenge'}
-Challenge: ${input.challenge || 'not specified'}
-Desired emotional outcome: ${input.emotionalOutcome || 'safe and supported'}
-Fun-story theme: ${input.theme || 'Adventure'}
-Parent's context or story idea: ${input.storyIdea || 'none provided'}
+${modeContext}
 Favorite elements: ${input.favorites || 'none specified'}
-Desired lesson: ${input.lesson || 'a gentle positive emotional resolution'}
+Optional lesson or value: ${input.lesson || 'a gentle positive emotional resolution'}
 Visual style: ${input.style}
 Page count: ${input.length}
 
@@ -63,8 +73,6 @@ Requirements:
 - Exactly ${input.length} pages.
 - 25-55 words per page.
 - A clear beginning, escalation, emotional turning point, and comforting resolution.
-- If this is a Challenge story, use imaginative metaphor rather than lecturing. Reflect the real challenge gently, normalize mixed feelings, model one or two practical coping actions, and end with the child feeling ${input.emotionalOutcome || 'safe and supported'}.
-- Do not promise the challenge will instantly disappear.
 - Do not make the child feel bad, behind, babyish, or responsible for adult emotions.
 - Never shame or frighten the child.
 - Avoid graphic danger, death, weapons, adult themes, or medical claims.
