@@ -788,7 +788,7 @@ export default function Home() {
         pdf.setTextColor(111, 97, 170);
         pdf.setFont('times', 'normal');
         pdf.setFontSize(26);
-        pdf.text('☾', PAGE_W / 2, 505, { align: 'center' });
+        pdf.text('M', PAGE_W / 2, 505, { align: 'center' });
       }
 
       // Interior pages: one explicit PDF page each — no browser pagination involved.
@@ -906,7 +906,7 @@ export default function Home() {
         pdf.setTextColor(111, 97, 170);
         pdf.setFont('times', 'normal');
         pdf.setFontSize(24);
-        pdf.text('☾', PAGE / 2, y, { align: 'center' });
+        pdf.text('M', PAGE / 2, y, { align: 'center' });
       };
 
       const addPage = () => {
