@@ -909,11 +909,13 @@ export default function Home() {
         pdf.rect(0, 0, PAGE, PAGE, 'F');
       };
 
-      const addMoon = (y = PAGE - 66) => {
-        pdf.setTextColor(111, 97, 170);
-        pdf.setFont('times', 'normal');
-        pdf.setFontSize(24);
-        pdf.text('M', PAGE / 2, y, { align: 'center' });
+      const addEditorialOrnament = (y, width = 52) => {
+        pdf.setDrawColor(178, 163, 211);
+        pdf.setLineWidth(0.8);
+        pdf.line(PAGE / 2 - width / 2, y, PAGE / 2 - 8, y);
+        pdf.line(PAGE / 2 + 8, y, PAGE / 2 + width / 2, y);
+        pdf.setFillColor(111, 97, 170);
+        pdf.circle(PAGE / 2, y, 2.4, 'F');
       };
 
       const addPage = () => {
@@ -921,41 +923,61 @@ export default function Home() {
         addPaper();
       };
 
-      // Interior page 1: half title.
+      const keepsakeName = story.characterBible?.name || form.childName || 'You';
+
+      // Interior page 1: designed half-title page.
       addPaper();
+      pdf.setDrawColor(222, 213, 235);
+      pdf.setLineWidth(1);
+      pdf.roundedRect(34, 34, PAGE - 68, PAGE - 68, 12, 12, 'S');
       pdf.setTextColor(111, 97, 170);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setCharSpace(1.7);
-      pdf.text('A MOONLIT KEEPSAKE', PAGE / 2, 180, { align: 'center' });
+      pdf.text('A MOONLIT KEEPSAKE', PAGE / 2, 142, { align: 'center' });
       pdf.setCharSpace(0);
+      addEditorialOrnament(168, 66);
       pdf.setTextColor(39, 33, 59);
       pdf.setFont('times', 'bold');
-      pdf.setFontSize(29);
-      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Moonlit Story'), PAGE - SAFE * 2);
-      pdf.text(titleLines, PAGE / 2, 230, { align: 'center', lineHeightFactor: 1.08 });
-      addMoon(420);
+      pdf.setFontSize(30);
+      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Moonlit Story'), PAGE - 126);
+      pdf.text(titleLines, PAGE / 2, 222, { align: 'center', lineHeightFactor: 1.08 });
+      const titleBottom = 222 + titleLines.length * 32;
+      pdf.setTextColor(99, 89, 122);
+      pdf.setFont('times', 'italic');
+      pdf.setFontSize(13);
+      pdf.text(`A personalized story for ${keepsakeName}`, PAGE / 2, Math.min(titleBottom + 42, 430), { align: 'center' });
+      addEditorialOrnament(480, 42);
 
-      // Interior page 2: dedication / created-for page.
+      // Interior page 2: dedication / ownership page.
       addPage();
+      pdf.setDrawColor(222, 213, 235);
+      pdf.setLineWidth(1);
+      pdf.roundedRect(48, 48, PAGE - 96, PAGE - 96, 12, 12, 'S');
       pdf.setTextColor(111, 97, 170);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setCharSpace(1.5);
-      pdf.text('CREATED ESPECIALLY FOR', PAGE / 2, 170, { align: 'center' });
+      pdf.text('THIS STORY WAS CREATED ESPECIALLY FOR', PAGE / 2, 142, { align: 'center' });
       pdf.setCharSpace(0);
       pdf.setTextColor(39, 33, 59);
       pdf.setFont('times', 'bold');
-      pdf.setFontSize(28);
-      pdf.text(story.characterBible?.name || form.childName || 'You', PAGE / 2, 218, { align: 'center' });
+      pdf.setFontSize(31);
+      pdf.text(keepsakeName, PAGE / 2, 202, { align: 'center' });
+      addEditorialOrnament(230, 54);
       const dedication = decodeHtmlEntities(story.dedication || form.dedication || '');
-      if (dedication) {
-        pdf.setFont('times', 'italic');
-        pdf.setFontSize(17);
-        const lines = pdf.splitTextToSize(dedication, PAGE - 140);
-        pdf.text(lines.slice(0, 9), PAGE / 2, 310, { align: 'center', lineHeightFactor: 1.45 });
-      }
-      addMoon(470);
+      pdf.setTextColor(76, 68, 94);
+      pdf.setFont('times', 'italic');
+      pdf.setFontSize(dedication ? 17 : 15);
+      const dedicationCopy = dedication || 'May this story always remind you how deeply you are known and loved.';
+      const lines = pdf.splitTextToSize(dedicationCopy, PAGE - 164);
+      pdf.text(lines.slice(0, 9), PAGE / 2, 300, { align: 'center', lineHeightFactor: 1.48 });
+      pdf.setTextColor(111, 97, 170);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(7.5);
+      pdf.setCharSpace(1.2);
+      pdf.text('ONE CHILD · ONE STORY · MADE JUST FOR THEM', PAGE / 2, 472, { align: 'center' });
+      pdf.setCharSpace(0);
 
       // Each scene becomes a true picture-book spread: full-art page followed by a calm text page.
       for (let index = 0; index < story.pages.length; index += 1) {
@@ -994,46 +1016,58 @@ export default function Home() {
         const blockHeight = Math.min(lines.length, bilingual ? 15 : 12) * lineHeight;
         const startY = Math.max(180, (PAGE - blockHeight) / 2 + 16);
         pdf.text(lines.slice(0, bilingual ? 15 : 12), PAGE / 2, startY, { align: 'center', lineHeightFactor: bilingual ? 1.38 : 1.42, maxWidth });
-        addMoon(505);
+        addEditorialOrnament(500, 38);
       }
 
       // Closing page.
       addPage();
+      pdf.setDrawColor(222, 213, 235);
+      pdf.setLineWidth(1);
+      pdf.roundedRect(48, 48, PAGE - 96, PAGE - 96, 12, 12, 'S');
       pdf.setTextColor(111, 97, 170);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setCharSpace(1.4);
-      pdf.text('THE END', PAGE / 2, 190, { align: 'center' });
+      pdf.text('THE END', PAGE / 2, 174, { align: 'center' });
       pdf.setCharSpace(0);
+      addEditorialOrnament(204, 54);
       pdf.setTextColor(39, 33, 59);
       pdf.setFont('times', 'italic');
       pdf.setFontSize(18);
-      const takeawayLines = pdf.splitTextToSize(story.takeaway || 'Every story leaves a little light behind.', PAGE - 150);
-      pdf.text(takeawayLines.slice(0, 8), PAGE / 2, 270, { align: 'center', lineHeightFactor: 1.45 });
-      addMoon(440);
+      const takeawayLines = pdf.splitTextToSize(story.takeaway || 'Every story leaves a little light behind.', PAGE - 164);
+      pdf.text(takeawayLines.slice(0, 8), PAGE / 2, 278, { align: 'center', lineHeightFactor: 1.48 });
+      pdf.setTextColor(99, 89, 122);
+      pdf.setFont('times', 'normal');
+      pdf.setFontSize(12);
+      pdf.text(`A story to return to, whenever ${keepsakeName} needs it.`, PAGE / 2, 438, { align: 'center' });
 
-      // Creation / rights page.
+      // Customer-facing colophon page.
       addPage();
       pdf.setTextColor(111, 97, 170);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setCharSpace(1.3);
-      pdf.text('MADE WITH MOONLIT', PAGE / 2, 250, { align: 'center' });
+      pdf.text('MADE WITH MOONLIT', PAGE / 2, 218, { align: 'center' });
       pdf.setCharSpace(0);
+      addEditorialOrnament(244, 46);
+      pdf.setTextColor(39, 33, 59);
+      pdf.setFont('times', 'bold');
+      pdf.setFontSize(19);
+      pdf.text(`Created especially for ${keepsakeName}`, PAGE / 2, 294, { align: 'center' });
       pdf.setTextColor(76, 68, 94);
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(10);
       const languageLabel = (story.language || form.language) === 'es' ? 'Español' : (story.language || form.language) === 'en-es' ? 'English + Español' : 'English';
-      pdf.text(`Personalized story · ${languageLabel}`, PAGE / 2, 286, { align: 'center' });
-      pdf.text('Please review every page before ordering a physical copy.', PAGE / 2, 310, { align: 'center' });
-      addMoon(390);
+      pdf.text(`Personalized keepsake · ${languageLabel}`, PAGE / 2, 326, { align: 'center' });
+      pdf.setFont('times', 'italic');
+      pdf.setFontSize(12);
+      pdf.text('One story, made for one child.', PAGE / 2, 374, { align: 'center' });
 
-      // Bound books are assembled in signatures. Normalize the proof to a multiple of four pages.
+      // Bound books are assembled in signatures. Normalize to a multiple of four with truly blank pages.
       const totalPages = pdf.getNumberOfPages();
       const normalizedTotal = Math.max(16, Math.ceil(totalPages / 4) * 4);
       while (pdf.getNumberOfPages() < normalizedTotal) {
         addPage();
-        addMoon(PAGE / 2 + 8);
       }
 
       const safeName = String(decodeHtmlEntities(story.title || 'moonlit-story'))
@@ -1119,20 +1153,34 @@ export default function Home() {
       pdf.setFontSize(12);
       pdf.text(`Created especially for ${story.characterBible?.name || form.childName || 'you'}`, frontCenter + HINGE_SAFE / 2, H * 0.91, { align: 'center' });
 
+      const backX = WRAP_SAFE;
+      const backWidth = Math.max(120, PANEL - WRAP_SAFE * 2 - HINGE_SAFE);
+      const backCenter = backX + backWidth / 2;
+      pdf.setTextColor(111, 97, 170);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setCharSpace(1.3);
+      pdf.text('A ONE-OF-A-KIND KEEPSAKE', backCenter, H * 0.19, { align: 'center' });
+      pdf.setCharSpace(0);
       pdf.setTextColor(39, 33, 59);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(20);
-      pdf.text('A story made just for them.', PANEL / 2, H * 0.25, { align: 'center' });
+      const backHeadline = `A story shaped around ${story.characterBible?.name || form.childName || 'their'}'s world.`;
+      const backHeadlineLines = pdf.splitTextToSize(backHeadline, backWidth);
+      pdf.text(backHeadlineLines.slice(0, 3), backCenter, H * 0.25, { align: 'center', lineHeightFactor: 1.08 });
+      pdf.setDrawColor(189, 176, 214);
+      pdf.setLineWidth(0.8);
+      pdf.line(backCenter - 24, H * 0.34, backCenter + 24, H * 0.34);
       pdf.setFont('times', 'normal');
-      pdf.setFontSize(13);
+      pdf.setFontSize(12.5);
       const blurb = decodeHtmlEntities(backCoverBlurb || story.summary || 'A personalized Moonlit keepsake.');
-      const blurbLines = pdf.splitTextToSize(blurb, Math.max(120, PANEL - WRAP_SAFE * 2 - HINGE_SAFE));
-      pdf.text(blurbLines.slice(0, 10), PANEL / 2 - HINGE_SAFE / 2, H * 0.34, { align: 'center', lineHeightFactor: 1.45 });
+      const blurbLines = pdf.splitTextToSize(blurb, backWidth);
+      pdf.text(blurbLines.slice(0, 10), backX, H * 0.40, { align: 'left', lineHeightFactor: 1.38, maxWidth: backWidth });
       pdf.setTextColor(111, 97, 170);
       pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(9);
-      pdf.setCharSpace(1.2);
-      pdf.text('MADE WITH MOONLIT', PANEL / 2 - HINGE_SAFE / 2, H * 0.72, { align: 'center' });
+      pdf.setFontSize(8.5);
+      pdf.setCharSpace(1.1);
+      pdf.text('MADE WITH MOONLIT', backX, H * 0.73);
       pdf.setCharSpace(0);
 
       const barcodeW = 144;
