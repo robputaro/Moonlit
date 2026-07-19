@@ -234,7 +234,6 @@ export default function Home() {
   const [coverExporting, setCoverExporting] = useState(false);
   const [coverSpec, setCoverSpec] = useState({ totalWidth: '19.00', totalHeight: '10.25', spineWidth: '0.25' });
   const [backCoverBlurb, setBackCoverBlurb] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
   const [referencePhoto, setReferencePhoto] = useState('');
   const [referencePhotoAnalysis, setReferencePhotoAnalysis] = useState(null);
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false);
@@ -263,19 +262,6 @@ export default function Home() {
   useEffect(() => {
     if (story?.summary && !backCoverBlurb) setBackCoverBlurb(decodeHtmlEntities(story.summary));
   }, [story?.summary]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function resolveAdmin() {
-      if (!user || !supabaseConfigured) { if (!cancelled) setIsAdmin(false); return; }
-      const configuredAdmin = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase();
-      const emailMatches = configuredAdmin && user.email?.toLowerCase() === configuredAdmin;
-      const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-      if (!cancelled) setIsAdmin(Boolean(emailMatches || data?.role === 'admin'));
-    }
-    resolveAdmin();
-    return () => { cancelled = true; };
-  }, [user]);
 
   useEffect(() => {
     if (!loading) return undefined;
@@ -1321,7 +1307,7 @@ export default function Home() {
           <span className="brand-mark">☾</span>
           <span>moonlit</span>
         </a>
-        <div className="header-actions-global"><a className="header-platform-link" href="/membership">Membership</a>{isAdmin && <a className="header-platform-link studio-link" href="/studio">Studio</a>}<button type="button" className="theme-toggle-button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'} title={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Bedtime'}</span></button><button type="button" onClick={openLibrary}>My stories</button>{supabaseConfigured ? (user ? <div className="account-chip"><span>{user.email}</span><button type="button" onClick={signOut}>Sign out</button></div> : <button type="button" className="sign-in-button" onClick={() => requestSignIn()}>Sign in</button>) : <div className="header-note">Local preview mode</div>}</div>
+        <div className="header-actions-global"><button type="button" className="theme-toggle-button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'} title={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Bedtime'}</span></button><button type="button" onClick={openLibrary}>My stories</button>{supabaseConfigured ? (user ? <div className="account-chip"><span>{user.email}</span><button type="button" onClick={signOut}>Sign out</button></div> : <button type="button" className="sign-in-button" onClick={() => requestSignIn()}>Sign in</button>) : <div className="header-note">Local preview mode</div>}</div>
       </header>
 
       <section className="shell">
@@ -1457,7 +1443,7 @@ export default function Home() {
               <div><small>Gentle takeaway</small><strong>{decodeHtmlEntities(story.takeaway)}</strong></div>
             </div>
             {error && <div className="error review-error">{error}</div>}
-            <div className="image-note"><strong>Illustrations are created after the writing.</strong> Review the story first, then create one page at a time or illustrate the full book.</div>
+            <div className="image-note"><strong>Illustrations are generated separately.</strong> Create one page at a time, or generate the whole book after you approve the writing. Each image uses OpenAI API credits.</div>
             <article className={`cover-editor ${story.coverImageUrl ? 'has-image' : ''}`}>
               <div className="cover-kicker">Book cover</div>
               <div className="cover-preview">
@@ -1472,9 +1458,9 @@ export default function Home() {
                   </>
                 ) : (
                   <div className="cover-placeholder">
-                    <span>{isAdmin ? 'Cover direction' : 'Cover artwork'}</span>
+                    <span>Cover direction</span>
                     <h3>{decodeHtmlEntities(story.title)}</h3>
-                    <p>{isAdmin ? (story.coverPrompt || 'A warm portrait cover featuring the child and the story’s central magical moment.') : 'Generate a personalized cover after you approve the story.'}</p>
+                    <p>{story.coverPrompt || 'A warm portrait cover featuring the child and the story’s central magical moment.'}</p>
                   </div>
                 )}
               </div>
@@ -1490,7 +1476,7 @@ export default function Home() {
                     {page.imageUrl ? (
                       <img src={page.imageUrl} alt={`Illustration for page ${page.pageNumber}`} />
                     ) : (
-                      <div className="illustration-copy"><span>{isAdmin ? 'Illustration direction' : 'Illustration'}</span><p>{isAdmin ? page.illustrationPrompt : 'Create this page’s personalized artwork when the story text is ready.'}</p></div>
+                      <div className="illustration-copy"><span>Illustration direction</span><p>{page.illustrationPrompt}</p></div>
                     )}
                     <button type="button" className="image-button" onClick={() => generateImageForPage(index)} disabled={imageLoading[index] || generatingAll}>
                       {imageLoading[index] ? imageLoadingMessage[index] || 'Creating illustration…' : page.imageUrl ? 'Regenerate image' : 'Generate image'}
@@ -1500,7 +1486,7 @@ export default function Home() {
                 </article>
               ))}
             </div>
-            {isAdmin && <aside className="print-production-panel">
+            <aside className="print-production-panel">
               <div className="print-production-heading">
                 <div><span className="print-readiness-kicker">Print review</span><strong>{story.coverImageUrl && story.pages.every((page) => page.imageUrl) ? 'Ready to prepare a physical proof' : 'Complete the artwork before ordering'}</strong><p>Interior: 8.5 × 8.5 in trim with bleed. Cover: Lulu casewrap spread, 19 × 10.25 in with a 0.25 in spine.</p></div>
                 <div className={`production-score ${story.coverImageUrl && story.pages.every((page) => page.imageUrl) ? 'ready' : ''}`}>{story.pages.filter((page) => page.imageUrl).length + (story.coverImageUrl ? 1 : 0)}/{story.pages.length + 1}</div>
@@ -1532,8 +1518,8 @@ export default function Home() {
                 <button type="button" className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building Lulu interior…' : 'Download Lulu interior PDF'}</button>
                 <button type="button" className="ghost keepsake-button" onClick={exportWraparoundCoverPdf} disabled={coverExporting || !story.coverImageUrl}>{coverExporting ? 'Building Lulu cover…' : 'Download Lulu cover PDF'}</button>
               </div>
-            </aside>}
-            <div className="sticky-actions"><span className="save-status">{saveMessage}</span><button className="ghost" onClick={saveToLibrary}>Save to My Stories</button><button className="ghost" onClick={printStory}>Digital PDF</button>{isAdmin && <button className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building 8.5×8.5…' : '8.5×8.5 Lulu PDF'}</button>}<button className="primary-small" onClick={() => setStep('read')}>Read the story →</button></div>
+            </aside>
+            <div className="sticky-actions"><span className="save-status">{saveMessage}</span><button className="ghost" onClick={saveToLibrary}>Save to My Stories</button><button className="ghost" onClick={printStory}>Digital PDF</button><button className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building 8.5×8.5…' : '8.5×8.5 Lulu PDF'}</button><button className="primary-small" onClick={() => setStep('read')}>Read the story →</button></div>
           </section>
         )}
 

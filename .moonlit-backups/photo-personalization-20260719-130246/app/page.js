@@ -160,30 +160,6 @@ async function dataUrlToBlob(dataUrl) {
   return response.blob();
 }
 
-async function prepareReferencePhoto(file) {
-  if (!file?.type?.startsWith('image/')) throw new Error('Choose a JPG, PNG, or WebP image.');
-  if (file.size > 12 * 1024 * 1024) throw new Error('Choose an image smaller than 12 MB.');
-  const source = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-  const image = await new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = source;
-  });
-  const maxSide = 1400;
-  const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(image.width * scale));
-  canvas.height = Math.max(1, Math.round(image.height * scale));
-  canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', 0.9);
-}
-
 
 const emptyForm = {
   childName: '',
@@ -234,10 +210,6 @@ export default function Home() {
   const [coverExporting, setCoverExporting] = useState(false);
   const [coverSpec, setCoverSpec] = useState({ totalWidth: '19.00', totalHeight: '10.25', spineWidth: '0.25' });
   const [backCoverBlurb, setBackCoverBlurb] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [referencePhoto, setReferencePhoto] = useState('');
-  const [referencePhotoAnalysis, setReferencePhotoAnalysis] = useState(null);
-  const [photoAnalyzing, setPhotoAnalyzing] = useState(false);
 
   const progress = useMemo(() => {
     if (step === 'create') return 1;
@@ -263,19 +235,6 @@ export default function Home() {
   useEffect(() => {
     if (story?.summary && !backCoverBlurb) setBackCoverBlurb(decodeHtmlEntities(story.summary));
   }, [story?.summary]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function resolveAdmin() {
-      if (!user || !supabaseConfigured) { if (!cancelled) setIsAdmin(false); return; }
-      const configuredAdmin = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase();
-      const emailMatches = configuredAdmin && user.email?.toLowerCase() === configuredAdmin;
-      const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-      if (!cancelled) setIsAdmin(Boolean(emailMatches || data?.role === 'admin'));
-    }
-    resolveAdmin();
-    return () => { cancelled = true; };
-  }, [user]);
 
   useEffect(() => {
     if (!loading) return undefined;
@@ -399,9 +358,6 @@ export default function Home() {
       storyData.coverImagePath = storyData.coverImagePath || row.cover_path;
       storyData.coverImageUrl = await signedAssetUrl(storyData.coverImagePath);
     }
-    if (storyData.referencePhotoPath) {
-      storyData.referencePhotoUrl = await signedAssetUrl(storyData.referencePhotoPath);
-    }
     storyData.pages = await Promise.all((storyData.pages || []).map(async (page) => ({
       ...page,
       imageUrl: page.imagePath ? await signedAssetUrl(page.imagePath) : ''
@@ -439,12 +395,6 @@ export default function Home() {
       cloudStory.coverImagePath = await uploadStoryAsset(`${basePath}/cover.png`, cloudStory.coverImageUrl);
     }
     cloudStory.coverImageUrl = '';
-
-    const referenceSource = cloudStory.referencePhotoUrl || referencePhoto;
-    if (referenceSource?.startsWith('data:image')) {
-      cloudStory.referencePhotoPath = await uploadStoryAsset(`${basePath}/reference-child.jpg`, referenceSource);
-    }
-    cloudStory.referencePhotoUrl = '';
 
     cloudStory.pages = await Promise.all((cloudStory.pages || []).map(async (page, index) => {
       const next = { ...page };
@@ -510,45 +460,6 @@ export default function Home() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  async function analyzeReferencePhoto(photoData = referencePhoto) {
-    if (!photoData) return null;
-    setPhotoAnalyzing(true);
-    try {
-      const response = await authenticatedFetch('/api/analyze-reference', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageData: photoData, childName: form.childName, age: form.age })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Photo analysis failed.');
-      setReferencePhotoAnalysis(data.profile);
-      return data.profile;
-    } finally {
-      setPhotoAnalyzing(false);
-    }
-  }
-
-  async function handleReferencePhoto(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setError('');
-    try {
-      const prepared = await prepareReferencePhoto(file);
-      setReferencePhoto(prepared);
-      setReferencePhotoAnalysis(null);
-      await analyzeReferencePhoto(prepared);
-    } catch (photoError) {
-      setError(photoError.message || 'Moonlit could not use that photo.');
-    } finally {
-      event.target.value = '';
-    }
-  }
-
-  function removeReferencePhoto() {
-    setReferencePhoto('');
-    setReferencePhotoAnalysis(null);
-  }
-
   async function generateStory(event) {
     event.preventDefault();
     if (supabaseConfigured && !user) {
@@ -558,21 +469,16 @@ export default function Home() {
     setLoading(true);
     setError('');
     try {
-      const activePhotoAnalysis = referencePhoto
-        ? (referencePhotoAnalysis || await analyzeReferencePhoto(referencePhoto))
-        : null;
       const generationInput = form.storyMode === 'Fun'
         ? {
             ...form,
             challenge: '',
             emotionalOutcome: '',
-            storyMode: 'Fun',
-            referencePhotoAnalysis: activePhotoAnalysis
+            storyMode: 'Fun'
           }
         : {
             ...form,
-            storyMode: 'Challenge',
-            referencePhotoAnalysis: activePhotoAnalysis
+            storyMode: 'Challenge'
           };
 
       const response = await authenticatedFetch('/api/generate', {
@@ -582,7 +488,7 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Story generation failed.');
-      setStory(decodeStoryEntities({ ...data, language: generationInput.language || 'en', dedication: generationInput.dedication || '', referencePhotoUrl: referencePhoto || '', referencePhotoAnalysis: activePhotoAnalysis }));
+      setStory(decodeStoryEntities({ ...data, language: generationInput.language || 'en', dedication: generationInput.dedication || '' }));
       setStoryId(null);
       setStep('review');
       setPageIndex(0);
@@ -621,8 +527,6 @@ export default function Home() {
           storyTitle: story.title,
           style: form.style,
           characterBible: story.characterBible,
-          referencePhoto: story.referencePhotoUrl || referencePhoto || '',
-          referencePhotoAnalysis: story.referencePhotoAnalysis || referencePhotoAnalysis,
           page
         })
       });
@@ -654,8 +558,6 @@ export default function Home() {
           storyTitle: story.title,
           style: form.style,
           characterBible: story.characterBible,
-          referencePhoto: story.referencePhotoUrl || referencePhoto || '',
-          referencePhotoAnalysis: story.referencePhotoAnalysis || referencePhotoAnalysis,
           page: { coverPrompt: story.coverPrompt || story.pages?.[0]?.illustrationPrompt }
         })
       });
@@ -756,8 +658,6 @@ export default function Home() {
   function loadSavedStory(record, targetStep = 'review') {
     setStory(decodeStoryEntities(record.story));
     setForm({ ...emptyForm, ...(record.form || {}) });
-    setReferencePhoto(record.story?.referencePhotoUrl || '');
-    setReferencePhotoAnalysis(record.story?.referencePhotoAnalysis || null);
     setStoryId(record.id);
     setPageIndex(0);
     setStep(targetStep);
@@ -1321,7 +1221,7 @@ export default function Home() {
           <span className="brand-mark">☾</span>
           <span>moonlit</span>
         </a>
-        <div className="header-actions-global"><a className="header-platform-link" href="/membership">Membership</a>{isAdmin && <a className="header-platform-link studio-link" href="/studio">Studio</a>}<button type="button" className="theme-toggle-button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'} title={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Bedtime'}</span></button><button type="button" onClick={openLibrary}>My stories</button>{supabaseConfigured ? (user ? <div className="account-chip"><span>{user.email}</span><button type="button" onClick={signOut}>Sign out</button></div> : <button type="button" className="sign-in-button" onClick={() => requestSignIn()}>Sign in</button>) : <div className="header-note">Local preview mode</div>}</div>
+        <div className="header-actions-global"><button type="button" className="theme-toggle-button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'} title={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Bedtime'}</span></button><button type="button" onClick={openLibrary}>My stories</button>{supabaseConfigured ? (user ? <div className="account-chip"><span>{user.email}</span><button type="button" onClick={signOut}>Sign out</button></div> : <button type="button" className="sign-in-button" onClick={() => requestSignIn()}>Sign in</button>) : <div className="header-note">Local preview mode</div>}</div>
       </header>
 
       <section className="shell">
@@ -1363,22 +1263,6 @@ export default function Home() {
                 <label>Pronouns<select value={form.pronouns} onChange={(e) => update('pronouns', e.target.value)}><option value="use-name">Use child's name only</option><option value="he/him">He/him</option><option value="she/her">She/her</option><option value="they/them">They/them</option></select></label>
                 <label>Appearance <span className="optional">optional</span><input value={form.appearance} onChange={(e) => update('appearance', e.target.value)} placeholder="Curly brown hair, green pajamas" /></label>
               </div>
-              <div className={`photo-personalization ${referencePhoto ? 'has-photo' : ''}`}>
-                <div className="photo-personalization-copy">
-                  <strong>Make the character feel more like your child <span className="optional">optional</span></strong>
-                  <p>Upload one clear photo to inspire the illustrated character’s hair, features, age, and overall look.</p>
-                  <small>Moonlit creates a storybook-inspired likeness, not an exact portrait. Use a photo you have permission to upload.</small>
-                </div>
-                {referencePhoto ? (
-                  <div className="photo-preview-wrap">
-                    <img src={referencePhoto} alt="Child reference preview" />
-                    <div><span>{photoAnalyzing ? 'Reading visual details…' : referencePhotoAnalysis ? 'Photo personalization enabled' : 'Photo ready'}</span><button type="button" onClick={removeReferencePhoto}>Remove</button></div>
-                  </div>
-                ) : (
-                  <label className="photo-upload-button">Upload a photo<input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleReferencePhoto} /></label>
-                )}
-              </div>
-
               <div className="field-grid two language-fields">
                 <label>Book language<select value={form.language} onChange={(e) => update('language', e.target.value)}><option value="en">English</option><option value="es">Español</option><option value="en-es">English + Español</option></select></label>
                 <label>Dedication <span className="optional">optional</span><input value={form.dedication} onChange={(e) => update('dedication', e.target.value)} placeholder="For August, with all our love — Grandma and Grandpa" /></label>
@@ -1447,7 +1331,6 @@ export default function Home() {
         {step === 'review' && story && (
           <section className="review-layout">
             <div className="review-header">
-              {story.referencePhotoAnalysis && <div className="photo-personalization-badge">Photo-personalized character</div>}
               <div><div className="eyebrow">Your story draft</div><h1>{decodeHtmlEntities(story.title)}</h1><p>{decodeHtmlEntities(story.summary)}</p></div>
               <div className="header-actions"><button className="ghost" onClick={() => setStep('create')}>Edit setup</button><button className="ghost" onClick={generateCover} disabled={coverLoading}>{coverLoading ? 'Creating cover…' : story.coverImageUrl ? 'Regenerate cover' : 'Generate cover'}</button><button className="ghost" onClick={generateAllImages} disabled={generatingAll}>{generatingAll ? 'Illustrating pages…' : 'Generate all images'}</button><button className="primary-small" onClick={() => setStep('read')}>Open storybook →</button></div>
             </div>
@@ -1457,7 +1340,7 @@ export default function Home() {
               <div><small>Gentle takeaway</small><strong>{decodeHtmlEntities(story.takeaway)}</strong></div>
             </div>
             {error && <div className="error review-error">{error}</div>}
-            <div className="image-note"><strong>Illustrations are created after the writing.</strong> Review the story first, then create one page at a time or illustrate the full book.</div>
+            <div className="image-note"><strong>Illustrations are generated separately.</strong> Create one page at a time, or generate the whole book after you approve the writing. Each image uses OpenAI API credits.</div>
             <article className={`cover-editor ${story.coverImageUrl ? 'has-image' : ''}`}>
               <div className="cover-kicker">Book cover</div>
               <div className="cover-preview">
@@ -1472,9 +1355,9 @@ export default function Home() {
                   </>
                 ) : (
                   <div className="cover-placeholder">
-                    <span>{isAdmin ? 'Cover direction' : 'Cover artwork'}</span>
+                    <span>Cover direction</span>
                     <h3>{decodeHtmlEntities(story.title)}</h3>
-                    <p>{isAdmin ? (story.coverPrompt || 'A warm portrait cover featuring the child and the story’s central magical moment.') : 'Generate a personalized cover after you approve the story.'}</p>
+                    <p>{story.coverPrompt || 'A warm portrait cover featuring the child and the story’s central magical moment.'}</p>
                   </div>
                 )}
               </div>
@@ -1490,7 +1373,7 @@ export default function Home() {
                     {page.imageUrl ? (
                       <img src={page.imageUrl} alt={`Illustration for page ${page.pageNumber}`} />
                     ) : (
-                      <div className="illustration-copy"><span>{isAdmin ? 'Illustration direction' : 'Illustration'}</span><p>{isAdmin ? page.illustrationPrompt : 'Create this page’s personalized artwork when the story text is ready.'}</p></div>
+                      <div className="illustration-copy"><span>Illustration direction</span><p>{page.illustrationPrompt}</p></div>
                     )}
                     <button type="button" className="image-button" onClick={() => generateImageForPage(index)} disabled={imageLoading[index] || generatingAll}>
                       {imageLoading[index] ? imageLoadingMessage[index] || 'Creating illustration…' : page.imageUrl ? 'Regenerate image' : 'Generate image'}
@@ -1500,7 +1383,7 @@ export default function Home() {
                 </article>
               ))}
             </div>
-            {isAdmin && <aside className="print-production-panel">
+            <aside className="print-production-panel">
               <div className="print-production-heading">
                 <div><span className="print-readiness-kicker">Print review</span><strong>{story.coverImageUrl && story.pages.every((page) => page.imageUrl) ? 'Ready to prepare a physical proof' : 'Complete the artwork before ordering'}</strong><p>Interior: 8.5 × 8.5 in trim with bleed. Cover: Lulu casewrap spread, 19 × 10.25 in with a 0.25 in spine.</p></div>
                 <div className={`production-score ${story.coverImageUrl && story.pages.every((page) => page.imageUrl) ? 'ready' : ''}`}>{story.pages.filter((page) => page.imageUrl).length + (story.coverImageUrl ? 1 : 0)}/{story.pages.length + 1}</div>
@@ -1532,8 +1415,8 @@ export default function Home() {
                 <button type="button" className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building Lulu interior…' : 'Download Lulu interior PDF'}</button>
                 <button type="button" className="ghost keepsake-button" onClick={exportWraparoundCoverPdf} disabled={coverExporting || !story.coverImageUrl}>{coverExporting ? 'Building Lulu cover…' : 'Download Lulu cover PDF'}</button>
               </div>
-            </aside>}
-            <div className="sticky-actions"><span className="save-status">{saveMessage}</span><button className="ghost" onClick={saveToLibrary}>Save to My Stories</button><button className="ghost" onClick={printStory}>Digital PDF</button>{isAdmin && <button className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building 8.5×8.5…' : '8.5×8.5 Lulu PDF'}</button>}<button className="primary-small" onClick={() => setStep('read')}>Read the story →</button></div>
+            </aside>
+            <div className="sticky-actions"><span className="save-status">{saveMessage}</span><button className="ghost" onClick={saveToLibrary}>Save to My Stories</button><button className="ghost" onClick={printStory}>Digital PDF</button><button className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building 8.5×8.5…' : '8.5×8.5 Lulu PDF'}</button><button className="primary-small" onClick={() => setStep('read')}>Read the story →</button></div>
           </section>
         )}
 
@@ -1541,7 +1424,7 @@ export default function Home() {
           <section className="library-view">
             <div className="library-header">
               <div><div className="eyebrow">Your Moonlit shelf</div><h1>My Stories</h1><p>Your books are saved to your account and available wherever you sign in.</p></div>
-              <button className="primary-small" onClick={() => { setStory(null); setStoryId(null); setForm(emptyForm); setReferencePhoto(''); setReferencePhotoAnalysis(null); setStep('create'); }}>Create a new story</button>
+              <button className="primary-small" onClick={() => { setStory(null); setStoryId(null); setForm(emptyForm); setStep('create'); }}>Create a new story</button>
             </div>
             {error && <div className="error">{error}</div>}
             {libraryLoading ? (
