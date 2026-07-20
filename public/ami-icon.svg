@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="AMI icon">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F4D79A"/><stop offset=".55" stop-color="#DFAE5C"/><stop offset="1" stop-color="#B97C36"/></linearGradient>
+    <linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A79BD7"/><stop offset="1" stop-color="#6657A8"/></linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#FBF8F1"/>
+  <path d="M72 14C39 18 20 43 23 70c3 23 21 40 47 40 16 0 29-6 39-17-8 4-16 5-24 4-22-2-38-19-36-41 2-20 16-36 35-41-4-1-8-1-12-1z" fill="url(#g)"/>
+  <path d="M30 81c12-9 24-10 36-4v22c-12-7-24-5-36 3V81z" fill="url(#b)"/>
+  <path d="M102 81c-12-9-24-10-36-4v22c12-7 24-5 36 3V81z" fill="#8172BF"/>
+  <path d="M66 77v23" stroke="#FBF8F1" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="63" cy="52" r="7" fill="#292448"/>
+  <path d="M57 58c-4 7-6 13-6 20h23c-1-8-4-15-11-20h-6z" fill="#292448"/>
+  <path d="M73 67l12-7 4 4-13 9z" fill="#292448"/>
+  <path d="M94 25l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#DFAE5C"/>
+</svg>
