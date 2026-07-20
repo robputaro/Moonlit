@@ -239,6 +239,7 @@ export default function Home() {
   const [referencePhoto, setReferencePhoto] = useState('');
   const [referencePhotoAnalysis, setReferencePhotoAnalysis] = useState(null);
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false);
+  const [billingStatus, setBillingStatus] = useState(null);
 
   const progress = useMemo(() => {
     if (step === 'create') return 1;
@@ -386,6 +387,20 @@ export default function Home() {
       headers: { ...(options.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }
     });
   }
+
+
+  async function refreshBillingStatus() {
+    if (!user || !supabaseConfigured) { setBillingStatus(null); return; }
+    try {
+      const token = await getAccessToken();
+      const response = await fetch('/api/billing/status', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+      if (response.ok) setBillingStatus(await response.json());
+    } catch {}
+  }
+
+  useEffect(() => {
+    refreshBillingStatus();
+  }, [user]);
 
   async function signedAssetUrl(path) {
     if (!path || !supabaseConfigured) return '';
@@ -583,6 +598,7 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Story generation failed.');
+      await refreshBillingStatus();
       setStory(decodeStoryEntities({ ...data, language: generationInput.language || 'en', dedication: generationInput.dedication || '', referencePhotoUrl: referencePhoto || '', referencePhotoAnalysis: activePhotoAnalysis }));
       setStoryId(null);
       setStep('review');
@@ -1322,7 +1338,7 @@ export default function Home() {
           <span className="brand-mark">a</span>
           <span>ami</span>
         </a>
-        <div className="header-actions-global"><a className="header-platform-link" href="/membership">Membership</a>{isAdmin && <a className="header-platform-link studio-link" href="/studio">Studio</a>}<button type="button" className="theme-toggle-button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'} title={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Bedtime'}</span></button><button type="button" onClick={openLibrary}>My stories</button>{supabaseConfigured ? (user ? <div className="account-chip"><span>{user.email}</span><button type="button" onClick={signOut}>Sign out</button></div> : <button type="button" className="sign-in-button" onClick={() => requestSignIn()}>Sign in</button>) : <div className="header-note">Local preview mode</div>}</div>
+        <div className="header-actions-global"><a className="header-platform-link" href="/membership">Membership</a>{user && <a className="header-credit-chip" href="/membership" title="Story credits">{billingStatus?.isAdmin ? 'Unlimited stories' : `${billingStatus?.credits ?? '…'} credits`}</a>}{isAdmin && <a className="header-platform-link studio-link" href="/studio">Studio</a>}<button type="button" className="theme-toggle-button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'} title={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Bedtime'}</span></button><button type="button" onClick={openLibrary}>My stories</button>{supabaseConfigured ? (user ? <div className="account-chip"><span>{user.email}</span><button type="button" onClick={signOut}>Sign out</button></div> : <button type="button" className="sign-in-button" onClick={() => requestSignIn()}>Sign in</button>) : <div className="header-note">Local preview mode</div>}</div>
       </header>
 
       <section className="shell">

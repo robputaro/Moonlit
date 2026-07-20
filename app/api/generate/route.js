@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authenticateRequest } from '../../../lib/supabase-server';
+import { getAdminClient } from '../../../lib/billing-server';
 
 function demoStory(input) {
   const name = input.childName || 'August';
@@ -207,6 +208,9 @@ async function generateWithRetry(generator, input, attempts = 2) {
 }
 
 export async function POST(request) {
+  let reserved = false;
+  let generationId = '';
+  let userId = '';
   try {
     const auth = await authenticateRequest(request);
     if (auth.configured && !auth.user) {
@@ -214,6 +218,23 @@ export async function POST(request) {
     }
     const input = await request.json();
     if (!input.childName) return NextResponse.json({ error: 'Please include a child name.' }, { status: 400 });
+
+    if (auth.user) {
+      userId = auth.user.id;
+      generationId = crypto.randomUUID();
+      const admin = getAdminClient();
+      const { error: reserveError } = await admin.rpc('reserve_story_credit', {
+        p_user_id: userId,
+        p_reference_id: generationId
+      });
+      if (reserveError) {
+        if (reserveError.message?.includes('NO_STORY_CREDITS')) {
+          return NextResponse.json({ error: 'You need a story credit to create this book. Join Ami Membership or wait for your next monthly credits.', code: 'NO_STORY_CREDITS' }, { status: 402 });
+        }
+        throw reserveError;
+      }
+      reserved = true;
+    }
 
     const provider = (process.env.STORY_PROVIDER || '').toLowerCase();
     let story;
@@ -223,9 +244,17 @@ export async function POST(request) {
 
     story.language = input.language || 'en';
     story.dedication = cleanGeneratedText(input.dedication || '');
-    return NextResponse.json(cleanGeneratedStory(story));
+    return NextResponse.json({ ...cleanGeneratedStory(story), billing: { creditUsed: reserved, generationId } });
   } catch (error) {
+    if (reserved && userId && generationId) {
+      try {
+        const admin = getAdminClient();
+        await admin.rpc('refund_story_credit', { p_user_id: userId, p_reference_id: generationId });
+      } catch (refundError) {
+        console.error('Story credit refund failed:', refundError);
+      }
+    }
     console.error('Story route failed:', error);
-    return NextResponse.json({ error: 'We could not finish that story this time. Please try again.' }, { status: 500 });
+    return NextResponse.json({ error: 'We could not finish that story this time. Your story credit was restored. Please try again.' }, { status: 500 });
   }
 }
