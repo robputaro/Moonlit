@@ -52,7 +52,44 @@ function languageInstruction(value) {
   return `Write every reader-visible field in natural, age-appropriate English. Illustration prompts must also be in English.`;
 }
 
+
+function ageWritingProfile(ageValue, language) {
+  const age = Math.max(2, Math.min(10, Number(ageValue) || 4));
+  const bilingual = language === 'en-es';
+  if (age <= 3) {
+    return {
+      label: 'young picture-book listener',
+      words: bilingual ? '8-18 words per language per page' : '15-30 words per page',
+      sentences: 'Usually 1-3 short sentences per page.',
+      craft: 'Use concrete words, rhythmic repetition, predictable phrasing, one clear action per page, and a very simple emotional arc. Avoid long explanations, stacked clauses, abstract vocabulary, and more than one new plot idea on a page.'
+    };
+  }
+  if (age <= 5) {
+    return {
+      label: 'preschool picture-book listener',
+      words: bilingual ? '14-26 words per language per page' : '24-45 words per page',
+      sentences: 'Usually 2-5 short sentences per page.',
+      craft: 'Use clear cause and effect, playful repetition, brief dialogue, vivid concrete details, and one main story beat per page. Keep paragraphs compact and easy to read aloud.'
+    };
+  }
+  if (age <= 7) {
+    return {
+      label: 'early elementary listener or emerging reader',
+      words: bilingual ? '20-34 words per language per page' : '38-68 words per page',
+      sentences: 'Use a short paragraph with varied but readable sentences.',
+      craft: 'Use richer dialogue, stronger plot progression, more specific description, and nuanced emotions while remaining read-aloud friendly. Let the child make meaningful choices in the story.'
+    };
+  }
+  return {
+    label: 'older elementary reader',
+    words: bilingual ? '28-45 words per language per page' : '55-90 words per page',
+    sentences: 'Use one or two compact paragraphs with varied sentence rhythm.',
+    craft: 'Use layered narrative, character agency, richer humor or suspense, and subtler emotional lessons. Avoid sounding babyish, repetitive, or overly instructional.'
+  };
+}
+
 function buildPrompt(input) {
+  const ageProfile = ageWritingProfile(input.age, input.language);
   const isChallenge = input.storyMode === 'Challenge';
   const modeContext = isChallenge
     ? `This is a CHALLENGE STORY.
@@ -85,8 +122,12 @@ Page count: ${input.length}
 
 Requirements:
 - Exactly ${input.length} pages.
-- For English-only or Spanish-only books, use 25-55 words per page.
-- For bilingual books, keep each language concise: approximately 18-35 words per language per page, while preserving the complete story arc.
+- Write for a ${ageProfile.label}.
+- Page-length target: ${ageProfile.words}.
+- Sentence guidance: ${ageProfile.sentences}
+- Age-specific craft guidance: ${ageProfile.craft}
+- Treat these page-length targets as hard editorial limits. Do not compensate for a young age by squeezing multiple long ideas into one sentence.
+- For bilingual books, both language sections must independently follow the age-specific limit while preserving a complete, natural story arc.
 - A clear beginning, escalation, emotional turning point, and comforting resolution.
 - Do not make the child feel bad, behind, babyish, or responsible for adult emotions.
 - Never shame or frighten the child.

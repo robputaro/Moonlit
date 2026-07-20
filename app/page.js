@@ -48,6 +48,17 @@ const imageLoadingMessages = [
   'Finishing the page…'
 ];
 
+const engagementCards = [
+  { type: 'choice', eyebrow: 'A tiny choice', question: 'Which little sidekick would your child pick?', options: ['Owl', 'Fox', 'Bunny', 'Tiny dinosaur'] },
+  { type: 'fact', eyebrow: 'Tiny fact', fact: 'Some dinosaurs were smaller than a modern chicken.' },
+  { type: 'about', eyebrow: 'About them', question: 'What makes your child laugh the hardest?', placeholder: 'A silly voice, dancing, their sibling…' },
+  { type: 'choice', eyebrow: 'A magical detail', question: 'Which sky feels most storybook-like?', options: ['Starry', 'Moonlit', 'Rainbow', 'Cloudy and cozy'] },
+  { type: 'fact', eyebrow: 'Tiny fact', fact: 'Your brain keeps organizing memories while you sleep.' },
+  { type: 'about', eyebrow: 'For future stories', question: 'What is their favorite stuffed animal or comfort item?', placeholder: 'A blue dinosaur named Roar…' },
+  { type: 'choice', eyebrow: 'A playful pick', question: 'Choose an adventure snack.', options: ['Apple stars', 'Moon cookies', 'Pancakes', 'Something very silly'] },
+  { type: 'fact', eyebrow: 'Tiny fact', fact: 'Owls can turn their heads much farther than people can.' }
+];
+
 const AMI_DRAFT_KEY = 'ami-story-draft-v1';
 const AMI_DRAFT_MAX_PHOTO_LENGTH = 2_000_000;
 
@@ -277,6 +288,8 @@ export default function Home() {
   const [draftMessage, setDraftMessage] = useState('');
   const [draftReady, setDraftReady] = useState(false);
   const [generationAllProgress, setGenerationAllProgress] = useState({ current: 0, total: 0 });
+  const [engagementAnswers, setEngagementAnswers] = useState({});
+  const [engagementCardIndex, setEngagementCardIndex] = useState(0);
   const draftSaveTimer = useRef(null);
 
   const progress = useMemo(() => {
@@ -857,10 +870,30 @@ export default function Home() {
     }
   }
 
+  function answerEngagementCard(value) {
+    const card = engagementCards[engagementCardIndex % engagementCards.length];
+    const answer = typeof value === 'string' ? value.trim() : '';
+    if (!answer) return;
+    const nextAnswers = { ...engagementAnswers, [engagementCardIndex]: { type: card.type, prompt: card.question || card.fact, answer } };
+    setEngagementAnswers(nextAnswers);
+    setStory((current) => {
+      if (!current) return current;
+      const nextStory = { ...current, engagementAnswers: nextAnswers };
+      scheduleStoryAutosave(nextStory);
+      return nextStory;
+    });
+    setEngagementCardIndex((current) => (current + 1) % engagementCards.length);
+  }
+
+  function skipEngagementCard() {
+    setEngagementCardIndex((current) => (current + 1) % engagementCards.length);
+  }
+
   async function generateAllImages() {
     if (!story?.pages?.length || generatingAll) return;
     const remaining = story.pages.map((page, index) => ({ page, index })).filter(({ page }) => !page.imageUrl);
     setGeneratingAll(true);
+    setEngagementCardIndex(0);
     setGenerationAllProgress({ current: 0, total: remaining.length });
     setError('');
     try {
@@ -1724,7 +1757,28 @@ export default function Home() {
             </div>
             {error && <div className="error review-error">{error}</div>}
             <div className="image-note"><strong>Illustrations are created after the writing.</strong> Review the story first, then create one page at a time or illustrate the full book.</div>
-            {generatingAll && <div className="illustration-progress-panel" role="status" aria-live="polite"><div><strong>Painting page {generationAllProgress.current} of {generationAllProgress.total}</strong><span>Each page is composed as a distinct story moment with its own action, setting, and camera view.</span></div><div className="illustration-progress-track"><i style={{ width: `${generationAllProgress.total ? Math.round((generationAllProgress.current / generationAllProgress.total) * 100) : 0}%` }} /></div></div>}
+            {generatingAll && (() => {
+              const card = engagementCards[engagementCardIndex % engagementCards.length];
+              const completed = story.pages.filter((page) => page.imageUrl).length;
+              return <div className="ami-assembly-workspace" role="status" aria-live="polite">
+                <div className="ami-assembly-heading">
+                  <div><span>YOUR BOOK IS COMING TOGETHER</span><strong>Painting page {generationAllProgress.current} of {generationAllProgress.total}</strong><p>{story.characterBible?.name || form.childName || 'Your child'}’s story is written. AMI is now building each illustrated moment and saving every finished page to the shelf.</p></div>
+                  <b>{generationAllProgress.total ? Math.round((generationAllProgress.current / generationAllProgress.total) * 100) : 0}%</b>
+                </div>
+                <div className="illustration-progress-track"><i style={{ width: `${generationAllProgress.total ? Math.round((generationAllProgress.current / generationAllProgress.total) * 100) : 0}%` }} /></div>
+                <div className="ami-page-reveal" aria-label={`${completed} illustrated pages complete`}>
+                  {story.pages.map((page, index) => <div key={page.pageNumber} className={`ami-page-mini ${page.imageUrl ? 'ready' : index + 1 === generationAllProgress.current ? 'painting' : ''}`}>{page.imageUrl ? <img src={page.imageUrl} alt="" /> : <span>{index + 1}</span>}</div>)}
+                </div>
+                <div className="ami-wait-card">
+                  <div className="ami-wait-card-copy"><span>{card.eyebrow}</span>{card.fact ? <><strong>Did you know?</strong><p>{card.fact}</p></> : <><strong>{card.question}</strong><p>{card.type === 'about' ? 'Optional. AMI can remember this with the story for future personalization.' : 'Pick one while the next page is painted.'}</p></>}</div>
+                  {card.options && <div className="ami-wait-options">{card.options.map((option) => <button type="button" key={option} onClick={() => answerEngagementCard(option)}>{option}</button>)}</div>}
+                  {card.type === 'about' && <form className="ami-wait-answer" onSubmit={(event) => { event.preventDefault(); const value = new FormData(event.currentTarget).get('answer'); answerEngagementCard(value); event.currentTarget.reset(); }}><input name="answer" placeholder={card.placeholder} /><button type="submit">Save answer</button></form>}
+                  {card.fact && <button type="button" className="ami-next-card" onClick={skipEngagementCard}>Another one →</button>}
+                  {!card.fact && <button type="button" className="ami-skip-card" onClick={skipEngagementCard}>Skip</button>}
+                </div>
+                {Object.keys(engagementAnswers).length >= 3 && <div className="ami-little-surprise"><span>✦</span><div><strong>A little surprise from AMI</strong><p>Curious families may occasionally receive bonus extras. No points to track and nothing required.</p></div></div>}
+              </div>;
+            })()}
             <article className={`cover-editor ${story.coverImageUrl ? 'has-image' : ''}`}>
               <div className="cover-kicker">Book cover</div>
               <div className="cover-preview">
