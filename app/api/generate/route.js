@@ -96,7 +96,13 @@ Requirements:
 - Return only valid JSON matching this structure:
 {"title":"","summary":"","takeaway":"","coverPrompt":"","characterBible":{"name":"","description":"","lockedWardrobe":"","visualAnchor":""},"pages":[{"pageNumber":1,"text":"","illustrationPrompt":""}]}
 - coverPrompt must describe one polished portrait cover scene without title text.
-- Every illustrationPrompt must repeat the child's stable appearance and wardrobe, maintain the selected visual style, describe a single clear scene, and end with: "consistent character design, no text in image."`;
+- Treat the illustrations as a visual sequence, not a collection of character portraits.
+- Every illustrationPrompt must explicitly include: the setting, a visible action, the child's emotion through body language, meaningful props or companions, foreground detail, background detail, lighting, and a camera framing.
+- Use varied framing across the book: establishing wide shot, medium interaction, close emotional detail, low-angle wonder, overhead discovery, or over-the-shoulder view. Never use the same framing on adjacent pages.
+- No more than one page in the entire book may be a simple portrait. Do not place the child standing alone against a plain, blank, studio, gradient, or empty background unless the story absolutely requires it.
+- Each page must visually advance that exact story beat through action or interaction. Avoid repeated poses, repeated rooms, repeated centered compositions, and generic smiling-at-camera scenes.
+- Ensure the first, middle, turning-point, and final scenes feel visually distinct in location, scale, mood, and composition.
+- Every illustrationPrompt must repeat the child's stable appearance and wardrobe, maintain the selected visual style, and end with: "consistent character design, no text in image."`;
 }
 
 function cleanGeneratedText(value) {

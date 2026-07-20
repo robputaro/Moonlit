@@ -10,6 +10,16 @@ function buildImagePrompt({ storyTitle, style, characterBible, page, kind }) {
   const visualAnchor = characterBible?.visualAnchor || 'same face, hair, age, proportions, outfit, and palette throughout the book';
   const scene = kind === 'cover' ? page?.coverPrompt || page?.illustrationPrompt : page?.illustrationPrompt;
   const photoProfile = arguments[0]?.referencePhotoAnalysis ? `\nPHOTO-DERIVED PROFILE: ${JSON.stringify(arguments[0].referencePhotoAnalysis)}` : '';
+  const pageNumber = Number(page?.pageNumber || 1);
+  const framingSequence = [
+    'wide establishing shot with layered environment and the character actively entering the scene',
+    'medium action shot focused on interaction with a prop, companion, or part of the setting',
+    'over-the-shoulder discovery view with a strong foreground element',
+    'low-angle sense-of-wonder composition with environmental scale',
+    'intimate close-to-medium emotional moment where hands, posture, and expression tell the story',
+    'high or overhead view that clearly shows movement through the setting'
+  ];
+  const preferredFraming = framingSequence[(Math.max(1, pageNumber) - 1) % framingSequence.length];
 
   return `Create one polished portrait illustration for a children's picture book.
 
@@ -25,11 +35,17 @@ Continuity anchor: ${visualAnchor}${photoProfile}
 SCENE:
 ${scene}
 
+PAGE-SPECIFIC COMPOSITION TARGET:
+${kind === 'cover' ? 'dynamic cover tableau with a clear focal relationship and a richly suggested world' : preferredFraming}
+
 Composition and safety requirements:
-- One clear story moment with expressive body language and a warm emotional tone.
+- One clear story moment with expressive body language and a warm emotional tone. The character must be doing something, reacting to something, or interacting with someone.
+- Build a complete environment with meaningful foreground, middle ground, and background details that support the page text.
+- Never use a blank, plain, studio, gradient-only, or empty background. Never default to a centered child standing and smiling at the viewer.
+- Avoid passport-photo framing, fashion poses, repeated neutral standing poses, and generic character showcase compositions.
 - Child-friendly, comforting, whimsical, and appropriate for young children.
 - Preserve the exact character description, face, hair, clothing, age, proportions, and palette.
-- Portrait composition with natural breathing space.
+- Portrait page dimensions with cinematic visual depth; vary character scale and placement rather than centering the child on every page.
 - ${kind === 'cover' ? 'Create a strong cover-worthy focal composition with room near the upper area, but do not render a title.' : 'Compose as a finished interior picture-book page.'}
 - No written words, letters, captions, logos, watermarks, frames, or speech bubbles.
 - No frightening imagery, realistic peril, shame, or medical imagery.

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, supabaseConfigured } from '../lib/supabase-browser';
 import SiteFooter from './components/SiteFooter';
 
@@ -47,6 +47,38 @@ const imageLoadingMessages = [
   'Painting the details…',
   'Finishing the page…'
 ];
+
+const AMI_DRAFT_KEY = 'ami-story-draft-v1';
+const AMI_DRAFT_MAX_PHOTO_LENGTH = 2_000_000;
+
+function canonicalSiteUrl() {
+  const configured = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '');
+  if (configured) return configured;
+  if (typeof window !== 'undefined') return window.location.origin;
+  return 'https://www.storiesbyami.com';
+}
+
+function readStoryDraft() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(AMI_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.form || !parsed.savedAt) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoryDraft(payload) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(AMI_DRAFT_KEY, JSON.stringify({ ...payload, savedAt: new Date().toISOString() }));
+  } catch (error) {
+    console.warn('Ami could not save the local story draft:', error);
+  }
+}
 
 
 function cleanStoryText(value) {
@@ -240,6 +272,10 @@ export default function Home() {
   const [referencePhotoAnalysis, setReferencePhotoAnalysis] = useState(null);
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false);
   const [billingStatus, setBillingStatus] = useState(null);
+  const [draftMessage, setDraftMessage] = useState('');
+  const [draftReady, setDraftReady] = useState(false);
+  const [generationAllProgress, setGenerationAllProgress] = useState({ current: 0, total: 0 });
+  const draftSaveTimer = useRef(null);
 
   const progress = useMemo(() => {
     if (step === 'create') return 1;
@@ -247,6 +283,43 @@ export default function Home() {
     if (step === 'read') return 3;
     return 0;
   }, [step]);
+
+  useEffect(() => {
+    const canonical = canonicalSiteUrl();
+    try {
+      const target = new URL(canonical);
+      if (window.location.hostname !== target.hostname && ['storiesbyami.com', 'readami.com', 'www.readami.com'].includes(window.location.hostname)) {
+        const next = `${target.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
+        window.location.replace(next);
+        return;
+      }
+    } catch {}
+
+    const draft = readStoryDraft();
+    if (draft) {
+      setForm((current) => ({ ...current, ...draft.form }));
+      setReferencePhoto(draft.referencePhoto || '');
+      setReferencePhotoAnalysis(draft.referencePhotoAnalysis || null);
+      setStep('create');
+      setDraftMessage('Your unfinished story setup was restored.');
+    }
+    setDraftReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady || step !== 'create') return undefined;
+    if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
+    draftSaveTimer.current = setTimeout(() => {
+      const safePhoto = referencePhoto && referencePhoto.length <= AMI_DRAFT_MAX_PHOTO_LENGTH ? referencePhoto : '';
+      writeStoryDraft({
+        form,
+        step: 'create',
+        referencePhoto: safePhoto,
+        referencePhotoAnalysis
+      });
+    }, 350);
+    return () => { if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current); };
+  }, [form, step, referencePhoto, referencePhotoAnalysis, draftReady]);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem('moonlit-theme');
@@ -316,6 +389,8 @@ export default function Home() {
   }, []);
 
   function requestSignIn(message = 'Create a free account to save and continue your stories anywhere.') {
+    const safePhoto = referencePhoto && referencePhoto.length <= AMI_DRAFT_MAX_PHOTO_LENGTH ? referencePhoto : '';
+    writeStoryDraft({ form, step: 'create', referencePhoto: safePhoto, referencePhotoAnalysis });
     setAuthMessage(message);
     setAuthOpen(true);
   }
@@ -351,7 +426,7 @@ export default function Home() {
       const { error: googleError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin,
+          redirectTo: `${canonicalSiteUrl()}/?resume=draft`,
           queryParams: { prompt: 'select_account' }
         }
       });
@@ -603,6 +678,8 @@ export default function Home() {
       setStoryId(null);
       setStep('review');
       setPageIndex(0);
+      window.localStorage.removeItem(AMI_DRAFT_KEY);
+      setDraftMessage('');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -688,14 +765,18 @@ export default function Home() {
 
   async function generateAllImages() {
     if (!story?.pages?.length || generatingAll) return;
+    const remaining = story.pages.map((page, index) => ({ page, index })).filter(({ page }) => !page.imageUrl);
     setGeneratingAll(true);
+    setGenerationAllProgress({ current: 0, total: remaining.length });
     setError('');
     try {
-      for (let i = 0; i < story.pages.length; i += 1) {
-        if (!story.pages[i].imageUrl) await generateImageForPage(i);
+      for (let position = 0; position < remaining.length; position += 1) {
+        setGenerationAllProgress({ current: position + 1, total: remaining.length });
+        await generateImageForPage(remaining[position].index);
       }
     } finally {
       setGeneratingAll(false);
+      setGenerationAllProgress({ current: 0, total: 0 });
     }
   }
 
@@ -1454,6 +1535,8 @@ export default function Home() {
                 <div className="generation-note">Your story will be generated as an editable draft before any illustrations are created.</div>
               </div>
 
+              {draftMessage && <div className="draft-restored"><strong>Welcome back.</strong><span>{draftMessage}</span><button type="button" onClick={() => { window.localStorage.removeItem(AMI_DRAFT_KEY); setForm(emptyForm); setReferencePhoto(''); setReferencePhotoAnalysis(null); setDraftMessage(''); }}>Start fresh</button></div>}
+              {loading && <div className="ami-generation-stage" role="status" aria-live="polite"><div className="ami-generation-orbit"><span>✦</span></div><div><strong>{loadingMessage || 'Writing your story…'}</strong><p>Ami is shaping the story, planning distinct scenes, and preparing an editable draft. Keep this tab open for a moment.</p><div className="ami-generation-steps"><span className="done">Story details</span><span className={loadingMessage?.includes('page') || loadingMessage?.includes('ready') ? 'done' : ''}>Story arc</span><span className={loadingMessage?.includes('ready') ? 'done' : ''}>Page plan</span></div></div></div>}
               {error && <div className="error">{error}</div>}
               <button className="primary-button" disabled={loading}>{loading ? loadingMessage || 'Writing your story…' : form.storyMode === 'Challenge' ? 'Create their challenge story' : 'Create my story'}<span>→</span></button>
               <p className="privacy-note">Use a first name or nickname. Ami does not need private information about your child.</p>
@@ -1475,6 +1558,7 @@ export default function Home() {
             </div>
             {error && <div className="error review-error">{error}</div>}
             <div className="image-note"><strong>Illustrations are created after the writing.</strong> Review the story first, then create one page at a time or illustrate the full book.</div>
+            {generatingAll && <div className="illustration-progress-panel" role="status" aria-live="polite"><div><strong>Painting page {generationAllProgress.current} of {generationAllProgress.total}</strong><span>Each page is composed as a distinct story moment with its own action, setting, and camera view.</span></div><div className="illustration-progress-track"><i style={{ width: `${generationAllProgress.total ? Math.round((generationAllProgress.current / generationAllProgress.total) * 100) : 0}%` }} /></div></div>}
             <article className={`cover-editor ${story.coverImageUrl ? 'has-image' : ''}`}>
               <div className="cover-kicker">Book cover</div>
               <div className="cover-preview">
