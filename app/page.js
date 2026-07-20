@@ -1064,8 +1064,14 @@ export default function Home() {
     try {
       const { jsPDF } = await import('jspdf');
       const PAGE = 630; // 8.75 inches at 72 pt/in: 8.5x8.5 trim plus 0.125in bleed on every edge.
-      const TRIM_INSET = 9;
-      const SAFE = 48;
+      const BLEED = 9; // 0.125 in on each edge.
+      const TRIM = 612; // 8.5 in at 72 pt/in.
+      const PAGE_CENTER = BLEED + TRIM / 2;
+      const FRAME_INSET_FROM_TRIM = 45;
+      const FRAME_X = BLEED + FRAME_INSET_FROM_TRIM;
+      const FRAME_Y = FRAME_X;
+      const FRAME_SIZE = TRIM - FRAME_INSET_FROM_TRIM * 2;
+      const SAFE = 54;
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: [PAGE, PAGE], compress: true });
 
       const fetchDataUrl = async (url) => {
@@ -1110,10 +1116,10 @@ export default function Home() {
       const addEditorialOrnament = (y, width = 52) => {
         pdf.setDrawColor(178, 163, 211);
         pdf.setLineWidth(0.8);
-        pdf.line(PAGE / 2 - width / 2, y, PAGE / 2 - 8, y);
-        pdf.line(PAGE / 2 + 8, y, PAGE / 2 + width / 2, y);
+        pdf.line(PAGE_CENTER - width / 2, y, PAGE_CENTER - 8, y);
+        pdf.line(PAGE_CENTER + 8, y, PAGE_CENTER + width / 2, y);
         pdf.setFillColor(111, 97, 170);
-        pdf.circle(PAGE / 2, y, 2.4, 'F');
+        pdf.circle(PAGE_CENTER, y, 2.4, 'F');
       };
 
       const addPage = () => {
@@ -1127,41 +1133,41 @@ export default function Home() {
       addPaper();
       pdf.setDrawColor(222, 213, 235);
       pdf.setLineWidth(1);
-      pdf.roundedRect(34, 34, PAGE - 68, PAGE - 68, 12, 12, 'S');
+      pdf.roundedRect(FRAME_X, FRAME_Y, FRAME_SIZE, FRAME_SIZE, 12, 12, 'S');
       pdf.setTextColor(111, 97, 170);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setCharSpace(1.7);
-      pdf.text('A KEEPSAKE BY AMI', PAGE / 2, 142, { align: 'center' });
+      pdf.text('A KEEPSAKE BY AMI', PAGE_CENTER, 142, { align: 'center' });
       pdf.setCharSpace(0);
       addEditorialOrnament(168, 66);
       pdf.setTextColor(39, 33, 59);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(30);
       const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Ami Story'), PAGE - 126);
-      pdf.text(titleLines, PAGE / 2, 222, { align: 'center', lineHeightFactor: 1.08 });
+      pdf.text(titleLines, PAGE_CENTER, 222, { align: 'center', lineHeightFactor: 1.08 });
       const titleBottom = 222 + titleLines.length * 32;
       pdf.setTextColor(99, 89, 122);
       pdf.setFont('times', 'italic');
       pdf.setFontSize(13);
-      pdf.text(`A personalized story for ${keepsakeName}`, PAGE / 2, Math.min(titleBottom + 42, 430), { align: 'center' });
+      pdf.text(`A personalized story for ${keepsakeName}`, PAGE_CENTER, Math.min(titleBottom + 42, 430), { align: 'center' });
       addEditorialOrnament(480, 42);
 
       // Interior page 2: dedication / ownership page.
       addPage();
       pdf.setDrawColor(222, 213, 235);
       pdf.setLineWidth(1);
-      pdf.roundedRect(48, 48, PAGE - 96, PAGE - 96, 12, 12, 'S');
+      pdf.roundedRect(FRAME_X, FRAME_Y, FRAME_SIZE, FRAME_SIZE, 12, 12, 'S');
       pdf.setTextColor(111, 97, 170);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setCharSpace(1.5);
-      pdf.text('THIS STORY WAS CREATED ESPECIALLY FOR', PAGE / 2, 142, { align: 'center' });
+      pdf.text('THIS STORY WAS CREATED ESPECIALLY FOR', PAGE_CENTER, 142, { align: 'center' });
       pdf.setCharSpace(0);
       pdf.setTextColor(39, 33, 59);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(31);
-      pdf.text(keepsakeName, PAGE / 2, 202, { align: 'center' });
+      pdf.text(keepsakeName, PAGE_CENTER, 202, { align: 'center' });
       addEditorialOrnament(230, 54);
       const dedication = decodeHtmlEntities(story.dedication || form.dedication || '');
       pdf.setTextColor(76, 68, 94);
@@ -1169,12 +1175,12 @@ export default function Home() {
       pdf.setFontSize(dedication ? 17 : 15);
       const dedicationCopy = dedication || 'May this story always remind you how deeply you are known and loved.';
       const lines = pdf.splitTextToSize(dedicationCopy, PAGE - 164);
-      pdf.text(lines.slice(0, 9), PAGE / 2, 300, { align: 'center', lineHeightFactor: 1.48 });
+      pdf.text(lines.slice(0, 9), PAGE_CENTER, 300, { align: 'center', lineHeightFactor: 1.48 });
       pdf.setTextColor(111, 97, 170);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(7.5);
       pdf.setCharSpace(1.2);
-      pdf.text('ONE CHILD · ONE STORY · MADE JUST FOR THEM', PAGE / 2, 472, { align: 'center' });
+      pdf.text('ONE CHILD · ONE STORY · MADE JUST FOR THEM', PAGE_CENTER, 472, { align: 'center' });
       pdf.setCharSpace(0);
 
       // Each scene becomes a true picture-book spread: full-art page followed by a calm text page.
@@ -1191,18 +1197,18 @@ export default function Home() {
           pdf.setTextColor(98, 89, 122);
           pdf.setFont('helvetica', 'normal');
           pdf.setFontSize(13);
-          pdf.text(`Illustration ${index + 1} has not been generated`, PAGE / 2, PAGE / 2, { align: 'center' });
+          pdf.text(`Illustration ${index + 1} has not been generated`, PAGE_CENTER, PAGE_CENTER, { align: 'center' });
         }
 
         addPage();
         pdf.setDrawColor(223, 215, 235);
         pdf.setLineWidth(1);
-        pdf.roundedRect(TRIM_INSET + 20, TRIM_INSET + 20, PAGE - (TRIM_INSET + 20) * 2, PAGE - (TRIM_INSET + 20) * 2, 12, 12, 'S');
+        pdf.roundedRect(FRAME_X, FRAME_Y, FRAME_SIZE, FRAME_SIZE, 12, 12, 'S');
         pdf.setTextColor(111, 97, 170);
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(7.5);
         pdf.setCharSpace(1.2);
-        pdf.text(`${String(decodeHtmlEntities(story.title || '')).toUpperCase()} · ${index + 1}`, PAGE / 2, 105, { align: 'center', maxWidth: PAGE - SAFE * 2 });
+        pdf.text(`${String(decodeHtmlEntities(story.title || '')).toUpperCase()} · ${index + 1}`, PAGE_CENTER, 105, { align: 'center', maxWidth: PAGE - SAFE * 2 });
         pdf.setCharSpace(0);
         pdf.setTextColor(39, 33, 59);
         pdf.setFont('times', 'normal');
@@ -1213,7 +1219,7 @@ export default function Home() {
         const lineHeight = bilingual ? 22 : 26;
         const blockHeight = Math.min(lines.length, bilingual ? 15 : 12) * lineHeight;
         const startY = Math.max(180, (PAGE - blockHeight) / 2 + 16);
-        pdf.text(lines.slice(0, bilingual ? 15 : 12), PAGE / 2, startY, { align: 'center', lineHeightFactor: bilingual ? 1.38 : 1.42, maxWidth });
+        pdf.text(lines.slice(0, bilingual ? 15 : 12), PAGE_CENTER, startY, { align: 'center', lineHeightFactor: bilingual ? 1.38 : 1.42, maxWidth });
         addEditorialOrnament(500, 38);
       }
 
@@ -1221,23 +1227,23 @@ export default function Home() {
       addPage();
       pdf.setDrawColor(222, 213, 235);
       pdf.setLineWidth(1);
-      pdf.roundedRect(48, 48, PAGE - 96, PAGE - 96, 12, 12, 'S');
+      pdf.roundedRect(FRAME_X, FRAME_Y, FRAME_SIZE, FRAME_SIZE, 12, 12, 'S');
       pdf.setTextColor(111, 97, 170);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setCharSpace(1.4);
-      pdf.text('THE END', PAGE / 2, 174, { align: 'center' });
+      pdf.text('THE END', PAGE_CENTER, 174, { align: 'center' });
       pdf.setCharSpace(0);
       addEditorialOrnament(204, 54);
       pdf.setTextColor(39, 33, 59);
       pdf.setFont('times', 'italic');
       pdf.setFontSize(18);
       const takeawayLines = pdf.splitTextToSize(story.takeaway || 'Every story leaves a little light behind.', PAGE - 164);
-      pdf.text(takeawayLines.slice(0, 8), PAGE / 2, 278, { align: 'center', lineHeightFactor: 1.48 });
+      pdf.text(takeawayLines.slice(0, 8), PAGE_CENTER, 278, { align: 'center', lineHeightFactor: 1.48 });
       pdf.setTextColor(99, 89, 122);
       pdf.setFont('times', 'normal');
       pdf.setFontSize(12);
-      pdf.text(`A story to return to, whenever ${keepsakeName} needs it.`, PAGE / 2, 438, { align: 'center' });
+      pdf.text(`A story to return to, whenever ${keepsakeName} needs it.`, PAGE_CENTER, 438, { align: 'center' });
 
       // Customer-facing colophon page.
       addPage();
@@ -1245,21 +1251,21 @@ export default function Home() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setCharSpace(1.3);
-      pdf.text('MADE WITH AMI', PAGE / 2, 218, { align: 'center' });
+      pdf.text('MADE WITH AMI', PAGE_CENTER, 218, { align: 'center' });
       pdf.setCharSpace(0);
       addEditorialOrnament(244, 46);
       pdf.setTextColor(39, 33, 59);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(19);
-      pdf.text(`Created especially for ${keepsakeName}`, PAGE / 2, 294, { align: 'center' });
+      pdf.text(`Created especially for ${keepsakeName}`, PAGE_CENTER, 294, { align: 'center' });
       pdf.setTextColor(76, 68, 94);
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(10);
       const languageLabel = (story.language || form.language) === 'es' ? 'Español' : (story.language || form.language) === 'en-es' ? 'English + Español' : 'English';
-      pdf.text(`Personalized keepsake · ${languageLabel}`, PAGE / 2, 326, { align: 'center' });
+      pdf.text(`Personalized keepsake · ${languageLabel}`, PAGE_CENTER, 326, { align: 'center' });
       pdf.setFont('times', 'italic');
       pdf.setFontSize(12);
-      pdf.text('One story, made for one child.', PAGE / 2, 374, { align: 'center' });
+      pdf.text('One story, made for one child.', PAGE_CENTER, 374, { align: 'center' });
 
       // Bound books are assembled in signatures. Normalize to a multiple of four with truly blank pages.
       const totalPages = pdf.getNumberOfPages();
@@ -1278,6 +1284,56 @@ export default function Home() {
       setError(`We could not create the 8.5×8.5 Lulu interior PDF: ${pdfError.message || 'Unknown error'}`);
     } finally {
       setKeepsakeExporting(false);
+    }
+  }
+
+
+  async function exportLuluAlignmentProof() {
+    try {
+      const { jsPDF } = await import('jspdf');
+      const PAGE = 630;
+      const BLEED = 9;
+      const TRIM = 612;
+      const CENTER = BLEED + TRIM / 2;
+      const FRAME_INSET_FROM_TRIM = 45;
+      const FRAME_X = BLEED + FRAME_INSET_FROM_TRIM;
+      const FRAME_SIZE = TRIM - FRAME_INSET_FROM_TRIM * 2;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: [PAGE, PAGE], compress: true });
+
+      pdf.setFillColor(255, 252, 246);
+      pdf.rect(0, 0, PAGE, PAGE, 'F');
+
+      // Red = final 8.5 x 8.5 trim. The 9 pt outside edge is Lulu bleed.
+      pdf.setDrawColor(220, 70, 70);
+      pdf.setLineWidth(1);
+      pdf.rect(BLEED, BLEED, TRIM, TRIM, 'S');
+
+      // Purple = the exact decorative frame used by the exported interior.
+      pdf.setDrawColor(111, 97, 170);
+      pdf.setLineWidth(1.2);
+      pdf.roundedRect(FRAME_X, FRAME_X, FRAME_SIZE, FRAME_SIZE, 12, 12, 'S');
+
+      // Center axes must intersect at 315 pt, the center of both media and trim boxes.
+      pdf.setDrawColor(70, 130, 190);
+      pdf.setLineWidth(0.7);
+      pdf.line(CENTER, 0, CENTER, PAGE);
+      pdf.line(0, CENTER, PAGE, CENTER);
+
+      pdf.setTextColor(39, 33, 59);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.text('Stories by Ami · Lulu interior alignment proof', CENTER, 80, { align: 'center' });
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.text('Red: 8.5 in trim · Purple: content frame · Blue: exact page center', CENTER, 102, { align: 'center' });
+      pdf.text(`Left frame edge: ${FRAME_X} pt`, FRAME_X, CENTER - 12, { align: 'left' });
+      pdf.text(`Right frame edge: ${FRAME_X + FRAME_SIZE} pt`, FRAME_X + FRAME_SIZE, CENTER + 18, { align: 'right' });
+      pdf.text(`Equal outer margins: ${FRAME_X} pt`, CENTER, CENTER + 44, { align: 'center' });
+
+      pdf.save('stories-by-ami-lulu-alignment-proof.pdf');
+    } catch (proofError) {
+      console.error(proofError);
+      setError(`We could not create the Lulu alignment proof: ${proofError.message || 'Unknown error'}`);
     }
   }
 
@@ -1631,6 +1687,7 @@ export default function Home() {
               </div>
               <div className="print-export-actions">
                 <button type="button" className="ghost keepsake-button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building Lulu interior…' : 'Download Lulu interior PDF'}</button>
+                <button type="button" className="ghost keepsake-button" onClick={exportLuluAlignmentProof}>Download alignment proof</button>
                 <button type="button" className="ghost keepsake-button" onClick={exportWraparoundCoverPdf} disabled={coverExporting || !story.coverImageUrl}>{coverExporting ? 'Building Lulu cover…' : 'Download Lulu cover PDF'}</button>
               </div>
             </aside>}
