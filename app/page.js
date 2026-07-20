@@ -48,7 +48,7 @@ const imageLoadingMessages = [
   'Finishing the page…'
 ];
 
-const engagementCards = [
+const fallbackEngagementCards = [
   { type: 'choice', eyebrow: 'A tiny choice', question: 'Which little sidekick would your child pick?', options: ['Owl', 'Fox', 'Bunny', 'Tiny dinosaur'] },
   { type: 'fact', eyebrow: 'Tiny fact', fact: 'Some dinosaurs were smaller than a modern chicken.' },
   { type: 'about', eyebrow: 'About them', question: 'What makes your child laugh the hardest?', placeholder: 'A silly voice, dancing, their sibling…' },
@@ -60,6 +60,7 @@ const engagementCards = [
 ];
 
 const AMI_DRAFT_KEY = 'ami-story-draft-v1';
+const AMI_ENGAGEMENT_HISTORY_KEY = 'ami-engagement-history-v1';
 const AMI_DRAFT_MAX_PHOTO_LENGTH = 2_000_000;
 
 function canonicalSiteUrl() {
@@ -291,6 +292,9 @@ export default function Home() {
   const [engagementAnswers, setEngagementAnswers] = useState({});
   const [surpriseMessage, setSurpriseMessage] = useState('');
   const [engagementCardIndex, setEngagementCardIndex] = useState(0);
+  const [engagementCards, setEngagementCards] = useState(fallbackEngagementCards);
+  const [engagementPackLoading, setEngagementPackLoading] = useState(false);
+  const engagementPackStoryRef = useRef('');
   const draftSaveTimer = useRef(null);
 
   const progress = useMemo(() => {
@@ -768,6 +772,10 @@ export default function Home() {
       });
       setStory(generatedStory);
       await autosaveStorySnapshot(generatedStory, { id: persistentStoryId, status: 'manuscript_ready', message: 'Story saved automatically' });
+      setEngagementAnswers({});
+      setSurpriseMessage('');
+      setEngagementCards(fallbackEngagementCards);
+      generateEngagementPack(generatedStory, persistentStoryId).catch(() => {});
       setStep('review');
       setPageIndex(0);
       window.localStorage.removeItem(AMI_DRAFT_KEY);
@@ -875,11 +883,83 @@ export default function Home() {
     }
   }
 
+  function readEngagementHistory() {
+    if (typeof window === 'undefined') return { cardIds: [], factIds: [] };
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(AMI_ENGAGEMENT_HISTORY_KEY) || '{}');
+      return {
+        cardIds: Array.isArray(parsed.cardIds) ? parsed.cardIds.slice(-80) : [],
+        factIds: Array.isArray(parsed.factIds) ? parsed.factIds.slice(-80) : []
+      };
+    } catch {
+      return { cardIds: [], factIds: [] };
+    }
+  }
+
+  function rememberEngagementCards(cards) {
+    if (typeof window === 'undefined' || !Array.isArray(cards)) return;
+    try {
+      const history = readEngagementHistory();
+      const nextCardIds = [...history.cardIds, ...cards.map((card) => card.id).filter(Boolean)].slice(-80);
+      const nextFactIds = [...history.factIds, ...cards.map((card) => card.sourceFactId).filter(Boolean)].slice(-80);
+      window.localStorage.setItem(AMI_ENGAGEMENT_HISTORY_KEY, JSON.stringify({ cardIds: [...new Set(nextCardIds)], factIds: [...new Set(nextFactIds)] }));
+    } catch (historyError) {
+      console.warn('AMI could not remember engagement history:', historyError);
+    }
+  }
+
+  async function generateEngagementPack(activeStory = story, activeStoryId = storyId) {
+    if (!activeStory?.title || engagementPackLoading) return;
+    const packKey = `${activeStoryId || ''}:${activeStory.title}`;
+    if (engagementPackStoryRef.current === packKey && activeStory.engagementPack?.length) return;
+    engagementPackStoryRef.current = packKey;
+    setEngagementPackLoading(true);
+    try {
+      const history = readEngagementHistory();
+      const firstPrompt = activeStory.pages?.[0]?.illustrationPrompt || '';
+      const response = await authenticatedFetch('/api/engagement-pack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storyId: activeStoryId,
+          childName: activeStory.characterBible?.name || form.childName,
+          age: form.age,
+          title: activeStory.title,
+          summary: activeStory.summary,
+          theme: form.theme,
+          challenge: form.challenge,
+          favorites: form.favorites,
+          setting: firstPrompt,
+          characters: activeStory.characterBible?.description,
+          recentCardIds: history.cardIds,
+          recentFactIds: history.factIds
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data.cards) || data.cards.length < 4) throw new Error(data.error || 'Engagement pack unavailable.');
+      setEngagementCards(data.cards);
+      setEngagementCardIndex(0);
+      rememberEngagementCards(data.cards);
+      setStory((current) => {
+        if (!current) return current;
+        const nextStory = { ...current, engagementPack: data.cards };
+        scheduleStoryAutosave(nextStory);
+        return nextStory;
+      });
+    } catch (packError) {
+      console.warn('AMI dynamic engagement pack fell back to curated defaults:', packError);
+      setEngagementCards(fallbackEngagementCards);
+    } finally {
+      setEngagementPackLoading(false);
+    }
+  }
+
   async function answerEngagementCard(value) {
     const card = engagementCards[engagementCardIndex % engagementCards.length];
     const answer = typeof value === 'string' ? value.trim() : '';
     if (!answer) return;
-    const nextAnswers = { ...engagementAnswers, [engagementCardIndex]: { type: card.type, prompt: card.question || card.fact, answer } };
+    const answerKey = card.id || String(engagementCardIndex);
+    const nextAnswers = { ...engagementAnswers, [answerKey]: { cardId: card.id || null, type: card.type, prompt: card.question || card.fact, answer } };
     setEngagementAnswers(nextAnswers);
     setStory((current) => {
       if (!current) return current;
@@ -911,6 +991,8 @@ export default function Home() {
     const remaining = story.pages.map((page, index) => ({ page, index })).filter(({ page }) => !page.imageUrl);
     setGeneratingAll(true);
     setEngagementCardIndex(0);
+    if (story.engagementPack?.length) setEngagementCards(story.engagementPack);
+    else generateEngagementPack(story, storyId).catch(() => {});
     setGenerationAllProgress({ current: 0, total: remaining.length });
     setError('');
     try {
@@ -1000,7 +1082,11 @@ export default function Home() {
   }
 
   function loadSavedStory(record, targetStep = 'review') {
-    setStory(decodeStoryEntities(record.story));
+    const decodedStory = decodeStoryEntities(record.story);
+    setStory(decodedStory);
+    setEngagementCards(decodedStory?.engagementPack?.length ? decodedStory.engagementPack : fallbackEngagementCards);
+    setEngagementAnswers(decodedStory?.engagementAnswers || {});
+    setEngagementCardIndex(0);
     setForm({ ...emptyForm, ...(record.form || {}) });
     setReferencePhoto(record.story?.referencePhotoUrl || '');
     setReferencePhotoAnalysis(record.story?.referencePhotoAnalysis || null);
@@ -1787,11 +1873,11 @@ export default function Home() {
                   {story.pages.map((page, index) => <div key={page.pageNumber} className={`ami-page-mini ${page.imageUrl ? 'ready' : index + 1 === generationAllProgress.current ? 'painting' : ''}`}>{page.imageUrl ? <img src={page.imageUrl} alt="" /> : <span>{index + 1}</span>}</div>)}
                 </div>
                 <div className="ami-wait-card">
-                  <div className="ami-wait-card-copy"><span>{card.eyebrow}</span>{card.fact ? <><strong>Did you know?</strong><p>{card.fact}</p></> : <><strong>{card.question}</strong><p>{card.type === 'about' ? 'Optional. AMI can remember this with the story for future personalization.' : 'Pick one while the next page is painted.'}</p></>}</div>
-                  {card.options && <div className="ami-wait-options">{card.options.map((option) => <button type="button" key={option} onClick={() => answerEngagementCard(option)}>{option}</button>)}</div>}
-                  {card.type === 'about' && <form className="ami-wait-answer" onSubmit={(event) => { event.preventDefault(); const value = new FormData(event.currentTarget).get('answer'); answerEngagementCard(value); event.currentTarget.reset(); }}><input name="answer" placeholder={card.placeholder} /><button type="submit">Save answer</button></form>}
-                  {card.fact && <button type="button" className="ami-next-card" onClick={skipEngagementCard}>Another one →</button>}
-                  {!card.fact && <button type="button" className="ami-skip-card" onClick={skipEngagementCard}>Skip</button>}
+                  <div className="ami-wait-card-copy"><span>{engagementPackLoading ? 'Making this personal' : card.eyebrow}</span>{engagementPackLoading ? <><strong>AMI is finding a fresh question…</strong><p>The next cards will be shaped around this story.</p></> : card.fact ? <><strong>Did you know?</strong><p>{card.fact}</p></> : <><strong>{card.question}</strong><p>{card.type === 'about' ? 'Optional. AMI can remember this with the story for future personalization.' : 'Pick one while the next page is painted.'}</p></>}</div>
+                  {!engagementPackLoading && card.options && <div className="ami-wait-options">{card.options.map((option) => <button type="button" key={option} onClick={() => answerEngagementCard(option)}>{option}</button>)}</div>}
+                  {!engagementPackLoading && card.type === 'about' && <form className="ami-wait-answer" onSubmit={(event) => { event.preventDefault(); const value = new FormData(event.currentTarget).get('answer'); answerEngagementCard(value); event.currentTarget.reset(); }}><input name="answer" placeholder={card.placeholder} /><button type="submit">Save answer</button></form>}
+                  {!engagementPackLoading && card.fact && <button type="button" className="ami-next-card" onClick={skipEngagementCard}>Another one →</button>}
+                  {!engagementPackLoading && !card.fact && <button type="button" className="ami-skip-card" onClick={skipEngagementCard}>Skip</button>}
                 </div>
                 {(surpriseMessage || Object.keys(engagementAnswers).length >= 3) && <div className="ami-little-surprise"><span>✦</span><div><strong>A little surprise from AMI</strong><p>{surpriseMessage || 'Your answers are saved. AMI occasionally adds a small extra with no points to track.'}</p></div></div>}
               </div></div>;
