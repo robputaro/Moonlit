@@ -73,7 +73,7 @@ export default function MembershipPage() {
 
         <section className="membership-card">
           <div className="membership-price"><span>$</span><strong>9.99</strong><small>/ month</small></div>
-          <h2>Ami Membership</h2>
+          <h2>AMI Membership</h2>
           <ul>
             <li>2 digital story credits each month</li><li>English, Spanish, or bilingual books</li><li>Reader mode and downloadable PDF</li><li>Cloud story library</li><li>3 individual page regenerations per book</li><li>1 cover regeneration per book</li><li>Unused credits roll over up to 4</li><li>$5 off standard hardcover copies</li>
           </ul>
@@ -83,7 +83,7 @@ export default function MembershipPage() {
               <div><span>Story credits</span><strong>{billing?.isAdmin ? 'Unlimited' : billing?.credits ?? 0}</strong></div>
               <div><span>Status</span><strong>{billing?.isAdmin ? 'Admin access' : active ? 'Active member' : 'Not active'}</strong></div>
               {periodEnd && <small>{billing?.subscription?.cancelAtPeriodEnd ? `Access ends ${periodEnd}` : `Next billing date ${periodEnd}`}</small>}
-              {active ? <button type="button" onClick={() => startAction('/api/billing/portal')} disabled={actionLoading}>{actionLoading ? 'Opening…' : 'Manage membership'}</button> : <button type="button" className="membership-join-button" onClick={() => startAction('/api/billing/checkout')} disabled={actionLoading}>{actionLoading ? 'Opening secure checkout…' : 'Join Ami Membership'}</button>}
+              {active ? <button type="button" onClick={() => startAction('/api/billing/portal')} disabled={actionLoading}>{actionLoading ? 'Opening…' : 'Manage membership'}</button> : <button type="button" className="membership-join-button" onClick={() => startAction('/api/billing/checkout')} disabled={actionLoading}>{actionLoading ? 'Opening secure checkout…' : 'Join AMI Membership'}</button>}
             </div>
           ) : (
             <div className="membership-account-panel"><p>Sign in on the Ami home page, then return here to start your membership.</p><Link className="membership-signin-link" href="/">Sign in or create an account</Link></div>
@@ -95,7 +95,7 @@ export default function MembershipPage() {
         <section className="membership-compare">
           <article><span>One-time digital story</span><strong>$12.99</strong><p>A complete personalized story without a subscription. Checkout coming in a later milestone.</p></article>
           <article><span>Member hardcover</span><strong>$34.99</strong><p>Standard hardcover member price, plus shipping.</p></article>
-          <article><span>Ami Studio</span><strong>From $79</strong><p>Human-created and reviewed premium keepsakes.</p></article>
+          <article><span>AMI Studio</span><strong>From $79</strong><p>Human-created and reviewed premium keepsakes.</p></article>
         </section>
       </div>
       <SiteFooter />

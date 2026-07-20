@@ -252,6 +252,8 @@ export default function Home() {
   const [savedStories, setSavedStories] = useState([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const autosaveTimerRef = useRef(null);
+  const autosaveBusyRef = useRef(false);
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [authOpen, setAuthOpen] = useState(false);
@@ -558,7 +560,56 @@ export default function Home() {
       updated_at: now
     }, { onConflict: 'id' });
     if (saveError) throw saveError;
-    return { id, now };
+    return { id, now, cloudStory };
+  }
+
+
+  async function autosaveStorySnapshot(nextStory, options = {}) {
+    if (!nextStory) return null;
+    const id = options.id || storyId || crypto.randomUUID();
+    const createdAt = nextStory.createdAt || new Date().toISOString();
+    const snapshot = {
+      ...nextStory,
+      createdAt,
+      generationStatus: options.status || nextStory.generationStatus || 'draft',
+      generationId: nextStory.generationId || options.generationId || ''
+    };
+
+    setStoryId(id);
+    if (!supabaseConfigured) {
+      await putSavedStory({
+        id,
+        createdAt,
+        updatedAt: new Date().toISOString(),
+        title: snapshot.title || `A story for ${form.childName || 'your child'}`,
+        childName: snapshot.characterBible?.name || form.childName || '',
+        coverImageUrl: snapshot.coverImageUrl || '',
+        form,
+        story: snapshot
+      });
+      return id;
+    }
+    if (!user || autosaveBusyRef.current) return id;
+    autosaveBusyRef.current = true;
+    try {
+      await saveRecordToCloud({ id, story: snapshot, form, createdAt });
+      if (!options.silent) {
+        setSaveMessage(options.message || 'Saved automatically');
+        window.setTimeout(() => setSaveMessage(''), 1800);
+      }
+      return id;
+    } finally {
+      autosaveBusyRef.current = false;
+    }
+  }
+
+  function scheduleStoryAutosave(nextStory, delay = 900) {
+    if (!nextStory || !storyId) return;
+    if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveStorySnapshot(nextStory, { id: storyId, status: nextStory.generationStatus || 'draft', silent: true })
+        .catch((autosaveError) => console.warn('AMI autosave failed:', autosaveError));
+    }, delay);
   }
 
   async function importLocalStories() {
@@ -666,16 +717,43 @@ export default function Home() {
             referencePhotoAnalysis: activePhotoAnalysis
           };
 
+      const persistentStoryId = storyId || crypto.randomUUID();
+      setStoryId(persistentStoryId);
+      const startingStory = {
+        title: `Creating a story for ${form.childName || 'your child'}…`,
+        summary: 'AMI is writing this story now.',
+        pages: [],
+        characterBible: { name: form.childName || '', description: '', lockedWardrobe: '', visualAnchor: '' },
+        language: generationInput.language || 'en',
+        dedication: generationInput.dedication || '',
+        referencePhotoUrl: referencePhoto || '',
+        referencePhotoAnalysis: activePhotoAnalysis,
+        createdAt: new Date().toISOString(),
+        generationStatus: 'writing'
+      };
+      setStory(startingStory);
+      await autosaveStorySnapshot(startingStory, { id: persistentStoryId, status: 'writing', silent: true });
+
       const response = await authenticatedFetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(generationInput)
+        body: JSON.stringify({ ...generationInput, generationId: persistentStoryId })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Story generation failed.');
       await refreshBillingStatus();
-      setStory(decodeStoryEntities({ ...data, language: generationInput.language || 'en', dedication: generationInput.dedication || '', referencePhotoUrl: referencePhoto || '', referencePhotoAnalysis: activePhotoAnalysis }));
-      setStoryId(null);
+      const generatedStory = decodeStoryEntities({
+        ...data,
+        language: generationInput.language || 'en',
+        dedication: generationInput.dedication || '',
+        referencePhotoUrl: referencePhoto || '',
+        referencePhotoAnalysis: activePhotoAnalysis,
+        createdAt: startingStory.createdAt,
+        generationId: data.billing?.generationId || persistentStoryId,
+        generationStatus: 'manuscript_ready'
+      });
+      setStory(generatedStory);
+      await autosaveStorySnapshot(generatedStory, { id: persistentStoryId, status: 'manuscript_ready', message: 'Story saved automatically' });
       setStep('review');
       setPageIndex(0);
       window.localStorage.removeItem(AMI_DRAFT_KEY);
@@ -689,10 +767,15 @@ export default function Home() {
   }
 
   function updatePage(index, value) {
-    setStory((current) => ({
-      ...current,
-      pages: current.pages.map((page, i) => i === index ? { ...page, text: value } : page)
-    }));
+    setStory((current) => {
+      const nextStory = {
+        ...current,
+        generationStatus: current.generationStatus === 'complete' ? 'complete' : 'manuscript_ready',
+        pages: current.pages.map((page, i) => i === index ? { ...page, text: value } : page)
+      };
+      scheduleStoryAutosave(nextStory);
+      return nextStory;
+    });
   }
 
   async function generateImageForPage(index) {
@@ -722,10 +805,16 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Image generation failed.');
-      setStory((current) => ({
-        ...current,
-        pages: current.pages.map((item, i) => i === index ? { ...item, imageUrl: data.imageUrl } : item)
-      }));
+      let nextStory;
+      setStory((current) => {
+        nextStory = {
+          ...current,
+          generationStatus: 'illustrating',
+          pages: current.pages.map((item, i) => i === index ? { ...item, imageUrl: data.imageUrl } : item)
+        };
+        return nextStory;
+      });
+      if (nextStory) await autosaveStorySnapshot(nextStory, { id: storyId, status: 'illustrating', silent: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -755,7 +844,12 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Cover generation failed.');
-      setStory((current) => ({ ...current, coverImageUrl: data.imageUrl }));
+      let nextStory;
+      setStory((current) => {
+        nextStory = { ...current, coverImageUrl: data.imageUrl, generationStatus: 'illustrating' };
+        return nextStory;
+      });
+      if (nextStory) await autosaveStorySnapshot(nextStory, { id: storyId, status: 'illustrating', silent: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -774,6 +868,10 @@ export default function Home() {
         setGenerationAllProgress({ current: position + 1, total: remaining.length });
         await generateImageForPage(remaining[position].index);
       }
+      const completedStory = { ...story, generationStatus: 'complete' };
+      setStory((current) => ({ ...current, generationStatus: 'complete' }));
+      await autosaveStorySnapshot(completedStory, { id: storyId, status: 'complete', message: 'Book saved automatically' });
+      await refreshLibrary();
     } finally {
       setGeneratingAll(false);
       setGenerationAllProgress({ current: 0, total: 0 });
@@ -808,7 +906,7 @@ export default function Home() {
 
   async function openLibrary() {
     if (supabaseConfigured && !user) {
-      requestSignIn('Sign in to open your Ami story shelf.');
+      requestSignIn('Sign in to open your AMI story shelf.');
       return;
     }
     setStep('library');
@@ -827,7 +925,7 @@ export default function Home() {
       const id = storyId || crypto.randomUUID();
       const now = new Date().toISOString();
       if (supabaseConfigured) {
-        await saveRecordToCloud({ id, story, form, createdAt: story.createdAt || now });
+        await saveRecordToCloud({ id, story: { ...story, generationStatus: story.coverImageUrl && story.pages?.every((page) => page.imageUrl) ? 'complete' : (story.generationStatus || 'draft') }, form, createdAt: story.createdAt || now });
       } else {
         await putSavedStory({
           id,
@@ -1040,6 +1138,14 @@ export default function Home() {
         pdf.text(visibleLines, PAGE_W / 2, textY, { align: 'center', lineHeightFactor: 1.35, maxWidth: PAGE_W - 104 });
       }
 
+      for (let pageNumber = 1; pageNumber <= pdf.getNumberOfPages(); pageNumber += 1) {
+        pdf.setPage(pageNumber);
+        pdf.setTextColor(120, 112, 136);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(7);
+        pdf.text('Created with AMI', PAGE_W / 2, PAGE_H - 14, { align: 'center' });
+      }
+
       const safeName = String(decodeHtmlEntities(story.title || 'ami-story'))
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -1066,13 +1172,15 @@ export default function Home() {
       const PAGE = 630; // 8.75 inches at 72 pt/in: 8.5x8.5 trim plus 0.125in bleed on every edge.
       const BLEED = 9; // 0.125 in on each edge.
       const TRIM = 612; // 8.5 in at 72 pt/in.
-      const PAGE_CENTER = BLEED + TRIM / 2;
       const FRAME_INSET_FROM_TRIM = 45;
-      const FRAME_X = BLEED + FRAME_INSET_FROM_TRIM;
-      const FRAME_Y = FRAME_X;
       const FRAME_SIZE = TRIM - FRAME_INSET_FROM_TRIM * 2;
       const SAFE = 54;
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: [PAGE, PAGE], compress: true });
+      const PAGE_W = pdf.internal.pageSize.getWidth();
+      const PAGE_H = pdf.internal.pageSize.getHeight();
+      const PAGE_CENTER = PAGE_W / 2;
+      const FRAME_X = (PAGE_W - FRAME_SIZE) / 2;
+      const FRAME_Y = (PAGE_H - FRAME_SIZE) / 2;
 
       const fetchDataUrl = async (url) => {
         if (!url) return null;
@@ -1294,11 +1402,14 @@ export default function Home() {
       const PAGE = 630;
       const BLEED = 9;
       const TRIM = 612;
-      const CENTER = BLEED + TRIM / 2;
       const FRAME_INSET_FROM_TRIM = 45;
-      const FRAME_X = BLEED + FRAME_INSET_FROM_TRIM;
       const FRAME_SIZE = TRIM - FRAME_INSET_FROM_TRIM * 2;
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: [PAGE, PAGE], compress: true });
+      const PAGE_W = pdf.internal.pageSize.getWidth();
+      const PAGE_H = pdf.internal.pageSize.getHeight();
+      const CENTER = PAGE_W / 2;
+      const FRAME_X = (PAGE_W - FRAME_SIZE) / 2;
+      const FRAME_Y = (PAGE_H - FRAME_SIZE) / 2;
 
       pdf.setFillColor(255, 252, 246);
       pdf.rect(0, 0, PAGE, PAGE, 'F');
@@ -1306,12 +1417,12 @@ export default function Home() {
       // Red = final 8.5 x 8.5 trim. The 9 pt outside edge is Lulu bleed.
       pdf.setDrawColor(220, 70, 70);
       pdf.setLineWidth(1);
-      pdf.rect(BLEED, BLEED, TRIM, TRIM, 'S');
+      pdf.rect((PAGE_W - TRIM) / 2, (PAGE_H - TRIM) / 2, TRIM, TRIM, 'S');
 
       // Purple = the exact decorative frame used by the exported interior.
       pdf.setDrawColor(111, 97, 170);
       pdf.setLineWidth(1.2);
-      pdf.roundedRect(FRAME_X, FRAME_X, FRAME_SIZE, FRAME_SIZE, 12, 12, 'S');
+      pdf.roundedRect(FRAME_X, FRAME_Y, FRAME_SIZE, FRAME_SIZE, 12, 12, 'S');
 
       // Center axes must intersect at 315 pt, the center of both media and trim boxes.
       pdf.setDrawColor(70, 130, 190);
@@ -1496,7 +1607,7 @@ export default function Home() {
               <p>Create a personal storybook that gently reflects what your child is working through and how you want them to feel by the end.</p>
               <div className="promise-card">
                 <div className="spark">✦</div>
-                <div><strong>Personal, not preachy.</strong><br/>Ami turns a real childhood challenge into a warm, imaginative story your family can share tonight.</div>
+                <div><strong>Personal, not preachy.</strong><br/>AMI turns a real childhood challenge into a warm, imaginative story your family can share tonight.</div>
               </div>
               <div className="floating-art" aria-hidden="true">
                 <div className="moon">☾</div>
@@ -1521,7 +1632,7 @@ export default function Home() {
                 <div className="photo-personalization-copy">
                   <strong>Make the character feel more like your child <span className="optional">optional</span></strong>
                   <p>Upload one clear photo to inspire the illustrated character’s hair, features, age, and overall look.</p>
-                  <small>Ami creates a storybook-inspired likeness, not an exact portrait. Use a photo you have permission to upload.</small>
+                  <small>AMI creates a storybook-inspired likeness, not an exact portrait. Use a photo you have permission to upload.</small>
                 </div>
                 {referencePhoto ? (
                   <div className="photo-preview-wrap">
@@ -1592,10 +1703,10 @@ export default function Home() {
               </div>
 
               {draftMessage && <div className="draft-restored"><strong>Welcome back.</strong><span>{draftMessage}</span><button type="button" onClick={() => { window.localStorage.removeItem(AMI_DRAFT_KEY); setForm(emptyForm); setReferencePhoto(''); setReferencePhotoAnalysis(null); setDraftMessage(''); }}>Start fresh</button></div>}
-              {loading && <div className="ami-generation-stage" role="status" aria-live="polite"><div className="ami-generation-orbit"><span>✦</span></div><div><strong>{loadingMessage || 'Writing your story…'}</strong><p>Ami is shaping the story, planning distinct scenes, and preparing an editable draft. Keep this tab open for a moment.</p><div className="ami-generation-steps"><span className="done">Story details</span><span className={loadingMessage?.includes('page') || loadingMessage?.includes('ready') ? 'done' : ''}>Story arc</span><span className={loadingMessage?.includes('ready') ? 'done' : ''}>Page plan</span></div></div></div>}
+              {loading && <div className="ami-generation-stage" role="status" aria-live="polite"><div className="ami-generation-orbit"><span>✦</span></div><div><strong>{loadingMessage || 'Writing your story…'}</strong><p>AMI is shaping the story, planning distinct scenes, and preparing an editable draft. Keep this tab open for a moment.</p><div className="ami-generation-steps"><span className="done">Story details</span><span className={loadingMessage?.includes('page') || loadingMessage?.includes('ready') ? 'done' : ''}>Story arc</span><span className={loadingMessage?.includes('ready') ? 'done' : ''}>Page plan</span></div></div></div>}
               {error && <div className="error">{error}</div>}
               <button className="primary-button" disabled={loading}>{loading ? loadingMessage || 'Writing your story…' : form.storyMode === 'Challenge' ? 'Create their challenge story' : 'Create my story'}<span>→</span></button>
-              <p className="privacy-note">Use a first name or nickname. Ami does not need private information about your child.</p>
+              <p className="privacy-note">Use a first name or nickname. AMI does not need private information about your child.</p>
             </form>
           </div>
         )}
@@ -1622,7 +1733,7 @@ export default function Home() {
                   <>
                     <img src={story.coverImageUrl} alt={`Cover artwork for ${story.title}`} />
                     <div className="cover-title-overlay">
-                      <small>A Story by Ami</small>
+                      <small>A STORY BY AMI</small>
                       <h3>{decodeHtmlEntities(story.title)}</h3>
                       {story.characterBible?.name && <p>For {story.characterBible.name}</p>}
                     </div>
@@ -1698,7 +1809,7 @@ export default function Home() {
         {step === 'library' && (
           <section className="library-view">
             <div className="library-header">
-              <div><div className="eyebrow">Your Ami shelf</div><h1>My Stories</h1><p>Your books are saved to your account and available wherever you sign in.</p></div>
+              <div><div className="eyebrow">Your AMI shelf</div><h1>My Stories</h1><p>Your books are saved to your account and available wherever you sign in.</p></div>
               <button className="primary-small" onClick={() => { setStory(null); setStoryId(null); setForm(emptyForm); setReferencePhoto(''); setReferencePhotoAnalysis(null); setStep('create'); }}>Create a new story</button>
             </div>
             {error && <div className="error">{error}</div>}
@@ -1714,12 +1825,12 @@ export default function Home() {
                       {record.coverImageUrl ? (
                         <>
                           <img src={record.coverImageUrl} alt="" />
-                          <div className="library-cover-overlay"><small>A Story by Ami</small><strong>{record.title}</strong></div>
+                          <div className="library-cover-overlay"><small>A STORY BY AMI</small><strong>{record.title}</strong></div>
                         </>
                       ) : <div><span>☾</span><strong>{record.title}</strong></div>}
                     </button>
-                    <div className="library-card-copy"><small>{record.childName ? `For ${record.childName}` : 'Ami story'} · {new Date(record.updatedAt).toLocaleDateString()}</small><h2>{record.title}</h2></div>
-                    <div className="library-card-actions"><button onClick={() => loadSavedStory(record, 'review')}>Edit</button><button onClick={() => loadSavedStory(record, 'read')}>Read</button><button className="delete-story" onClick={() => deleteSavedStory(record.id)}>Delete</button></div>
+                    <div className="library-card-copy"><small>{record.childName ? `For ${record.childName}` : 'AMI story'} · {new Date(record.updatedAt).toLocaleDateString()}</small><h2>{record.title}</h2>{record.story?.generationStatus && record.story.generationStatus !== 'complete' && <span className="library-progress-badge">In progress · {record.story.pages?.filter((page) => page.imageUrl).length || 0}/{record.story.pages?.length || 0} pages illustrated</span>}</div>
+                    <div className="library-card-actions"><button onClick={() => loadSavedStory(record, 'review')}>{record.story?.generationStatus && record.story.generationStatus !== 'complete' ? 'Continue creating' : 'Edit'}</button><button onClick={() => loadSavedStory(record, 'read')} disabled={!record.story?.pages?.length}>Read</button><button className="delete-story" onClick={() => deleteSavedStory(record.id)}>Delete</button></div>
                   </article>
                 ))}
               </div>
@@ -1733,7 +1844,7 @@ export default function Home() {
                 {saveMessage && <span className="reader-save-status" role="status">{saveMessage}</span>}
                 <button type="button" onClick={saveToLibrary} disabled={saveMessage === 'Saving…'}>{saveMessage === 'Saving…' ? 'Saving…' : saveMessage ? 'Saved ✓' : 'Save'}</button>
                 <button type="button" onClick={printStory}>Digital PDF</button>
-                <button type="button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building…' : '8×8 PDF'}</button>
+                {isAdmin && <button type="button" onClick={exportKeepsakePdf} disabled={keepsakeExporting}>{keepsakeExporting ? 'Building…' : 'Lulu interior'}</button>}
               </div></div>
             {story.coverImageUrl && (
               <div className="reader-cover-strip">
@@ -1762,7 +1873,7 @@ export default function Home() {
             <button type="button" className="auth-close" onClick={() => setAuthOpen(false)} aria-label="Close">×</button>
             <div className="auth-moon">a</div>
             <div className="eyebrow">Keep their stories close</div>
-            <h2>{authMode === 'signup' ? 'Create your Ami account' : 'Welcome back'}</h2>
+            <h2>{authMode === 'signup' ? 'Create your AMI account' : 'Welcome back'}</h2>
             <p>{authMode === 'signup' ? 'Save books, continue illustrations, and open your family shelf on any device.' : 'Sign in to open your saved stories and continue where you left off.'}</p>
             <button type="button" className="google-auth-button" onClick={signInWithGoogle} disabled={authLoading}>
               <span className="google-mark" aria-hidden="true">G</span>
@@ -1775,8 +1886,8 @@ export default function Home() {
               {authMessage && <div className="auth-message">{authMessage}</div>}
               <button className="primary-button" disabled={authLoading}>{authLoading ? 'One moment…' : authMode === 'signup' ? 'Create free account' : 'Sign in'}<span>→</span></button>
             </form>
-            <button type="button" className="auth-switch" onClick={() => { setAuthMode(authMode === 'signup' ? 'signin' : 'signup'); setAuthMessage(''); }}>{authMode === 'signup' ? 'Already have an account? Sign in' : 'New to Ami? Create an account'}</button>
-            <small className="auth-privacy">Use a parent or guardian email. Ami only needs a child’s first name or nickname.</small>
+            <button type="button" className="auth-switch" onClick={() => { setAuthMode(authMode === 'signup' ? 'signin' : 'signup'); setAuthMessage(''); }}>{authMode === 'signup' ? 'Already have an account? Sign in' : 'New to AMI? Create an account'}</button>
+            <small className="auth-privacy">Use a parent or guardian email. AMI only needs a child’s first name or nickname.</small>
           </section>
         </div>}
 
@@ -1784,7 +1895,7 @@ export default function Home() {
           <section className="print-book" aria-hidden="true">
             <article className="print-cover">
               {story.coverImageUrl && <img src={story.coverImageUrl} alt="" />}
-              <div className="print-cover-title"><small>A Story by Ami</small><h1>{decodeHtmlEntities(story.title)}</h1><p>{decodeHtmlEntities(story.summary)}</p></div>
+              <div className="print-cover-title"><small>A STORY BY AMI</small><h1>{decodeHtmlEntities(story.title)}</h1><p>{decodeHtmlEntities(story.summary)}</p></div>
             </article>
             {story.pages.map((page, index) => (
               <article className="print-page" key={`print-${page.pageNumber}`}>

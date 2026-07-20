@@ -1,7 +1,7 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'Stories by Ami | Personalized Storybooks',
+  title: 'AMI | Personalized Storybooks',
   description: "Personalized stories made from their world."
 };
 

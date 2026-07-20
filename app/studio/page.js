@@ -21,7 +21,7 @@ export default function StudioPage() {
   useEffect(() => {
     if (!supabaseConfigured) {
       setLoading(false);
-      setMessage('Connect Supabase to use Ami Studio.');
+      setMessage('Connect Supabase to use AMI Studio.');
       return undefined;
     }
 
@@ -72,13 +72,13 @@ export default function StudioPage() {
     };
   }, []);
 
-  if (loading) return <main className="platform-page"><div className="platform-shell"><p>Opening Ami Studio…</p></div></main>;
+  if (loading) return <main className="platform-page"><div className="platform-shell"><p>Opening AMI Studio…</p></div></main>;
 
   if (!user) {
     return (
       <main className="platform-page">
         <div className="platform-shell platform-gate">
-          <span className="platform-kicker">Ami Studio</span>
+          <span className="platform-kicker">AMI Studio</span>
           <h1>Sign in to Ami first.</h1>
           <p>Studio is reserved for the Ami production team.</p>
           <Link className="platform-primary" href="/">Return to Stories by Ami</Link>
@@ -91,7 +91,7 @@ export default function StudioPage() {
     return (
       <main className="platform-page">
         <div className="platform-shell platform-gate">
-          <span className="platform-kicker">Ami Studio</span>
+          <span className="platform-kicker">AMI Studio</span>
           <h1>This account does not have Studio access.</h1>
           <p>Signed in as {user.email}</p>
           <Link className="platform-primary" href="/">Return to Stories by Ami</Link>
@@ -106,7 +106,7 @@ export default function StudioPage() {
         <header className="studio-header">
           <div>
             <span className="platform-kicker">Private production workspace</span>
-            <h1>Ami Studio</h1>
+            <h1>AMI Studio</h1>
             <p>Create Etsy and premium orders, manage proofs, and prepare approved books for print.</p>
           </div>
           <div className="studio-header-actions">
