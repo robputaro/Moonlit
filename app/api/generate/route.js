@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { authenticateRequest } from '../../../lib/supabase-server';
 import { getAdminClient } from '../../../lib/billing-server';
+import { estimateTextCostMicros, recordAiUsage } from '../../../lib/ai-tracking';
 
 function demoStory(input) {
   const name = input.childName || 'August';
@@ -206,22 +207,26 @@ function validateStory(story, expectedPages) {
 }
 
 async function openAIStory(input) {
+  const model = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
-      input: buildPrompt(input),
-      text: { format: { type: 'json_object' } }
-    })
+    body: JSON.stringify({ model, input: buildPrompt(input), text: { format: { type: 'json_object' } } })
   });
   if (!response.ok) throw new Error(`OpenAI error: ${await response.text()}`);
   const data = await response.json();
   const text = data.output_text || data.output?.flatMap(item => item.content || []).find(item => item.type === 'output_text')?.text;
-  return extractJson(text);
+  return {
+    story: extractJson(text),
+    provider: 'openai', model,
+    inputTokens: data.usage?.input_tokens || 0,
+    outputTokens: data.usage?.output_tokens || 0,
+    providerRequestId: data.id || null
+  };
 }
 
 async function claudeStory(input) {
+  const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -229,23 +234,26 @@ async function claudeStory(input) {
       'x-api-key': process.env.ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01'
     },
-    body: JSON.stringify({
-      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
-      max_tokens: 6500,
-      messages: [{ role: 'user', content: buildPrompt(input) }]
-    })
+    body: JSON.stringify({ model, max_tokens: 6500, messages: [{ role: 'user', content: buildPrompt(input) }] })
   });
   if (!response.ok) throw new Error(`Anthropic error: ${await response.text()}`);
   const data = await response.json();
   const text = data.content?.find(block => block.type === 'text')?.text || '';
-  return extractJson(text);
+  return {
+    story: extractJson(text),
+    provider: 'anthropic', model,
+    inputTokens: data.usage?.input_tokens || 0,
+    outputTokens: data.usage?.output_tokens || 0,
+    providerRequestId: data.id || null
+  };
 }
 
 async function generateWithRetry(generator, input, attempts = 2) {
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      return validateStory(await generator(input), input.length);
+      const result = await generator(input);
+      return { ...result, story: validateStory(result.story, input.length), attempts: attempt };
     } catch (error) {
       lastError = error;
       console.error(`Story generation attempt ${attempt} failed:`, error);
@@ -284,13 +292,28 @@ export async function POST(request) {
     }
 
     const provider = (process.env.STORY_PROVIDER || '').toLowerCase();
-    let story;
-    if (provider === 'openai' && process.env.OPENAI_API_KEY) story = await generateWithRetry(openAIStory, input);
-    else if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) story = await generateWithRetry(claudeStory, input);
-    else story = demoStory(input);
+    let result;
+    if (provider === 'openai' && process.env.OPENAI_API_KEY) result = await generateWithRetry(openAIStory, input);
+    else if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) result = await generateWithRetry(claudeStory, input);
+    else result = { story: demoStory(input), provider: 'demo', model: 'demo', inputTokens: 0, outputTokens: 0, providerRequestId: null, attempts: 1 };
 
+    const story = result.story;
     story.language = input.language || 'en';
     story.dedication = cleanGeneratedText(input.dedication || '');
+    if (auth.user) {
+      await recordAiUsage({
+        userId: auth.user.id,
+        storyId: input.generationId || null,
+        operation: 'story_generation',
+        provider: result.provider,
+        model: result.model,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        estimatedCostMicros: estimateTextCostMicros(result),
+        providerRequestId: result.providerRequestId,
+        metadata: { page_count: Number(input.length) || 0, attempts: result.attempts || 1, language: input.language || 'en' }
+      });
+    }
     return NextResponse.json({ ...cleanGeneratedStory(story), billing: { creditUsed: reserved, generationId } });
   } catch (error) {
     if (reserved && userId && generationId) {
@@ -301,6 +324,7 @@ export async function POST(request) {
         console.error('Story credit refund failed:', refundError);
       }
     }
+    if (userId) await recordAiUsage({ userId, storyId: generationId || null, operation: 'story_generation', provider: (process.env.STORY_PROVIDER || 'unknown'), model: process.env.ANTHROPIC_MODEL || process.env.OPENAI_MODEL || 'unknown', status: 'failed', errorCode: error?.message?.slice(0, 160), metadata: {} });
     console.error('Story route failed:', error);
     return NextResponse.json({ error: 'We could not finish that story this time. Your story credit was restored. Please try again.' }, { status: 500 });
   }

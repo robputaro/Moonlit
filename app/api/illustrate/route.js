@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authenticateRequest } from '../../../lib/supabase-server';
+import { estimateImageCostMicros, recordAiUsage } from '../../../lib/ai-tracking';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -54,6 +55,7 @@ Composition and safety requirements:
 }
 
 export async function POST(request) {
+  let tracking = { userId: null, storyId: null, operation: 'image_generation', model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1' };
   try {
     const auth = await authenticateRequest(request);
     if (auth.configured && !auth.user) {
@@ -64,6 +66,10 @@ export async function POST(request) {
     }
 
     const input = await request.json();
+    tracking = { userId: auth.user?.id || null, storyId: input.storyId || null, operation: input.operation || (input.kind === 'cover' ? 'cover_generation' : 'page_generation'), model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1' };
+    const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
+    const size = process.env.OPENAI_IMAGE_SIZE || '1024x1536';
+    const quality = process.env.OPENAI_IMAGE_QUALITY || 'medium';
     const scenePrompt = input?.kind === 'cover' ? input?.page?.coverPrompt || input?.page?.illustrationPrompt : input?.page?.illustrationPrompt;
     if (!scenePrompt) {
       return NextResponse.json({ error: 'This image is missing an illustration direction.' }, { status: 400 });
@@ -76,11 +82,11 @@ export async function POST(request) {
         if (!sourceResponse.ok) throw new Error(`Reference photo could not be loaded (${sourceResponse.status}).`);
         const photoBlob = await sourceResponse.blob();
         const body = new FormData();
-        body.append('model', process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1');
+        body.append('model', model);
         body.append('prompt', `${buildImagePrompt(input)}\nUse the attached child photo only as a visual likeness reference. Preserve recognizable non-sensitive features while transforming the child into the selected illustrated storybook style. Do not reproduce the original background or create a photorealistic image.`);
         body.append('image', photoBlob, 'child-reference.jpg');
-        body.append('size', process.env.OPENAI_IMAGE_SIZE || '1024x1536');
-        body.append('quality', process.env.OPENAI_IMAGE_QUALITY || 'medium');
+        body.append('size', size);
+        body.append('quality', quality);
         body.append('input_fidelity', 'high');
         response = await fetch('https://api.openai.com/v1/images/edits', {
           method: 'POST',
@@ -101,10 +107,10 @@ export async function POST(request) {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1',
+          model,
           prompt: buildImagePrompt(input),
-          size: process.env.OPENAI_IMAGE_SIZE || '1024x1536',
-          quality: process.env.OPENAI_IMAGE_QUALITY || 'medium',
+          size,
+          quality,
           n: 1
         })
       });
@@ -121,8 +127,19 @@ export async function POST(request) {
     const imageUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url;
     if (!imageUrl) throw new Error('OpenAI returned no image data.');
 
+    await recordAiUsage({
+      userId: auth.user?.id,
+      storyId: input.storyId || null,
+      operation: input.operation || (input.kind === 'cover' ? 'cover_generation' : 'page_generation'),
+      provider: 'openai', model, imageCount: 1, quality, size,
+      referenceImage: Boolean(input.referencePhoto),
+      estimatedCostMicros: estimateImageCostMicros({ quality, size, referenceImage: Boolean(input.referencePhoto) }),
+      providerRequestId: data?.id || image?.id || null,
+      metadata: { page_number: input.page?.pageNumber || null, kind: input.kind || 'page' }
+    });
     return NextResponse.json({ imageUrl });
   } catch (error) {
+    await recordAiUsage({ ...tracking, provider: 'openai', status: 'failed', errorCode: error?.message?.slice(0, 160), metadata: {} });
     console.error('Illustration route failed:', error);
     return NextResponse.json({ error: 'The illustration request failed. Please try again.' }, { status: 500 });
   }

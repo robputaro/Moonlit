@@ -289,6 +289,7 @@ export default function Home() {
   const [draftReady, setDraftReady] = useState(false);
   const [generationAllProgress, setGenerationAllProgress] = useState({ current: 0, total: 0 });
   const [engagementAnswers, setEngagementAnswers] = useState({});
+  const [surpriseMessage, setSurpriseMessage] = useState('');
   const [engagementCardIndex, setEngagementCardIndex] = useState(0);
   const draftSaveTimer = useRef(null);
 
@@ -813,7 +814,9 @@ export default function Home() {
           characterBible: story.characterBible,
           referencePhoto: story.referencePhotoUrl || referencePhoto || '',
           referencePhotoAnalysis: story.referencePhotoAnalysis || referencePhotoAnalysis,
-          page
+          page,
+          storyId,
+          operation: page.imageUrl ? 'page_regeneration' : 'page_generation'
         })
       });
       const data = await response.json();
@@ -852,7 +855,9 @@ export default function Home() {
           characterBible: story.characterBible,
           referencePhoto: story.referencePhotoUrl || referencePhoto || '',
           referencePhotoAnalysis: story.referencePhotoAnalysis || referencePhotoAnalysis,
-          page: { coverPrompt: story.coverPrompt || story.pages?.[0]?.illustrationPrompt }
+          page: { coverPrompt: story.coverPrompt || story.pages?.[0]?.illustrationPrompt },
+          storyId,
+          operation: story.coverImageUrl ? 'cover_regeneration' : 'cover_generation'
         })
       });
       const data = await response.json();
@@ -870,7 +875,7 @@ export default function Home() {
     }
   }
 
-  function answerEngagementCard(value) {
+  async function answerEngagementCard(value) {
     const card = engagementCards[engagementCardIndex % engagementCards.length];
     const answer = typeof value === 'string' ? value.trim() : '';
     if (!answer) return;
@@ -882,6 +887,18 @@ export default function Home() {
       scheduleStoryAutosave(nextStory);
       return nextStory;
     });
+    if (Object.keys(nextAnswers).length === 3 && storyId) {
+      try {
+        const response = await authenticatedFetch('/api/rewards/engagement', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storyId, answerCount: 3 })
+        });
+        const data = await response.json();
+        if (response.ok && data.granted) setSurpriseMessage(data.message || 'A little surprise from AMI.');
+      } catch (rewardError) {
+        console.warn('AMI surprise could not be granted:', rewardError);
+      }
+    }
     setEngagementCardIndex((current) => (current + 1) % engagementCards.length);
   }
 
@@ -1776,7 +1793,7 @@ export default function Home() {
                   {card.fact && <button type="button" className="ami-next-card" onClick={skipEngagementCard}>Another one →</button>}
                   {!card.fact && <button type="button" className="ami-skip-card" onClick={skipEngagementCard}>Skip</button>}
                 </div>
-                {Object.keys(engagementAnswers).length >= 3 && <div className="ami-little-surprise"><span>✦</span><div><strong>A little surprise from AMI</strong><p>Curious families may occasionally receive bonus extras. No points to track and nothing required.</p></div></div>}
+                {(surpriseMessage || Object.keys(engagementAnswers).length >= 3) && <div className="ami-little-surprise"><span>✦</span><div><strong>A little surprise from AMI</strong><p>{surpriseMessage || 'Your answers are saved. AMI occasionally adds a small extra with no points to track.'}</p></div></div>}
               </div>;
             })()}
             <article className={`cover-editor ${story.coverImageUrl ? 'has-image' : ''}`}>

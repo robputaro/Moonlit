@@ -17,6 +17,9 @@ export default function StudioPage() {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState([]);
   const [message, setMessage] = useState('');
+  const [insights, setInsights] = useState(null);
+  const [rewardForm, setRewardForm] = useState({ email: '', rewardType: 'extra_regeneration', quantity: 1, theme: '' });
+  const [rewardBusy, setRewardBusy] = useState(false);
 
   useEffect(() => {
     if (!supabaseConfigured) {
@@ -60,6 +63,9 @@ export default function StudioPage() {
           if (error) setMessage('Studio is ready, but the order tables still need the supplied Supabase setup SQL.');
           else setOrders(data || []);
         }
+        const token = sessionData.session?.access_token || '';
+        const insightResponse = await fetch('/api/studio/insights', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+        if (insightResponse.ok && !cancelled) setInsights(await insightResponse.json());
       }
       if (!cancelled) setLoading(false);
     }
@@ -71,6 +77,31 @@ export default function StudioPage() {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+
+  function moneyFromMicros(value) {
+    return `$${(Number(value || 0) / 1_000_000).toFixed(2)}`;
+  }
+
+  async function grantReward(event) {
+    event.preventDefault();
+    setRewardBusy(true); setMessage('');
+    try {
+      const { data } = await supabase.auth.getSession();
+      const response = await fetch('/api/studio/rewards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token || ''}` },
+        body: JSON.stringify(rewardForm)
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Reward could not be granted.');
+      setMessage(`Granted ${rewardForm.quantity} ${rewardForm.rewardType.replaceAll('_',' ')} to ${result.email}.`);
+      setRewardForm((current) => ({ ...current, email: '', quantity: 1 }));
+      const refresh = await fetch('/api/studio/insights', { headers: { Authorization: `Bearer ${data.session?.access_token || ''}` }, cache: 'no-store' });
+      if (refresh.ok) setInsights(await refresh.json());
+    } catch (error) { setMessage(error.message); }
+    finally { setRewardBusy(false); }
+  }
 
   if (loading) return <main className="platform-page"><div className="platform-shell"><p>Opening AMI Studio…</p></div></main>;
 
@@ -124,6 +155,30 @@ export default function StudioPage() {
               <strong>{orders.filter((order) => statuses.includes(order.status)).length}</strong>
             </article>
           ))}
+        </section>
+
+        <section className="studio-insight-grid">
+          <article><span>Tracked AI cost</span><strong>{moneyFromMicros(insights?.totals?.estimatedCostMicros)}</strong><small>Estimated from configured model rates</small></article>
+          <article><span>Average per book</span><strong>{moneyFromMicros(insights?.totals?.averageStoryCostMicros)}</strong><small>{insights?.totals?.trackedStories || 0} books tracked</small></article>
+          <article><span>Generated images</span><strong>{insights?.totals?.images || 0}</strong><small>{insights?.totals?.failedCalls || 0} failed AI calls</small></article>
+        </section>
+
+        <section className="studio-tools-grid">
+          <div className="studio-board">
+            <div className="studio-board-heading"><div><span className="platform-kicker">Economics</span><h2>Most expensive books</h2></div></div>
+            <div className="studio-cost-list">
+              {(insights?.recentStories || []).slice(0,8).map((item) => <div key={item.storyId}><code>{item.storyId.slice(0,8)}…</code><strong>{moneyFromMicros(item.costMicros)}</strong></div>)}
+              {!insights?.recentStories?.length && <p>No tracked calls yet. Run the migration, then generate a book.</p>}
+            </div>
+          </div>
+          <form className="studio-board studio-reward-form" onSubmit={grantReward}>
+            <div className="studio-board-heading"><div><span className="platform-kicker">A little surprise</span><h2>Grant a reward</h2></div></div>
+            <label>User email<input type="email" required value={rewardForm.email} onChange={(event)=>setRewardForm({...rewardForm,email:event.target.value})} /></label>
+            <label>Reward<select value={rewardForm.rewardType} onChange={(event)=>setRewardForm({...rewardForm,rewardType:event.target.value})}><option value="extra_regeneration">Extra regeneration</option><option value="theme_unlock">Theme unlock</option><option value="story_credit">Story credit</option><option value="print_discount">Print discount</option></select></label>
+            {rewardForm.rewardType === 'theme_unlock' && <label>Theme name<input value={rewardForm.theme} onChange={(event)=>setRewardForm({...rewardForm,theme:event.target.value})} placeholder="Holiday Glow" /></label>}
+            <label>Quantity<input type="number" min="1" max="20" value={rewardForm.quantity} onChange={(event)=>setRewardForm({...rewardForm,quantity:Number(event.target.value)})} /></label>
+            <button className="platform-primary" disabled={rewardBusy}>{rewardBusy ? 'Granting…' : 'Grant reward'}</button>
+          </form>
         </section>
 
         <section className="studio-board">
