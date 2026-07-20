@@ -1777,7 +1777,7 @@ export default function Home() {
             {generatingAll && (() => {
               const card = engagementCards[engagementCardIndex % engagementCards.length];
               const completed = story.pages.filter((page) => page.imageUrl).length;
-              return <div className="ami-assembly-workspace" role="status" aria-live="polite">
+              return <div className="ami-assembly-overlay" role="status" aria-live="polite"><div className="ami-assembly-workspace">
                 <div className="ami-assembly-heading">
                   <div><span>YOUR BOOK IS COMING TOGETHER</span><strong>Painting page {generationAllProgress.current} of {generationAllProgress.total}</strong><p>{story.characterBible?.name || form.childName || 'Your child'}’s story is written. AMI is now building each illustrated moment and saving every finished page to the shelf.</p></div>
                   <b>{generationAllProgress.total ? Math.round((generationAllProgress.current / generationAllProgress.total) * 100) : 0}%</b>
@@ -1794,7 +1794,7 @@ export default function Home() {
                   {!card.fact && <button type="button" className="ami-skip-card" onClick={skipEngagementCard}>Skip</button>}
                 </div>
                 {(surpriseMessage || Object.keys(engagementAnswers).length >= 3) && <div className="ami-little-surprise"><span>✦</span><div><strong>A little surprise from AMI</strong><p>{surpriseMessage || 'Your answers are saved. AMI occasionally adds a small extra with no points to track.'}</p></div></div>}
-              </div>;
+              </div></div>;
             })()}
             <article className={`cover-editor ${story.coverImageUrl ? 'has-image' : ''}`}>
               <div className="cover-kicker">Book cover</div>
