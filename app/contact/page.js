@@ -11,7 +11,7 @@ export default function ContactPage() {
     <main className="policy-page contact-page">
       <div className="policy-shell">
         <header className="policy-header">
-          <Link href="/" className="policy-back">← Stories by Ami</Link>
+          <Link href="/" className="policy-back">← Back to AMI</Link>
           <span className="platform-kicker">Contact</span>
           <h1>How can we help?</h1>
           <p>Reach out about your account, story, membership, proof, printed book, privacy request, or partnership.</p>
@@ -26,11 +26,11 @@ export default function ContactPage() {
           <article>
             <span>General inquiries</span>
             <h2>Press, partnerships, or hello</h2>
-            <p>For non-support questions and conversations about Stories by Ami.</p>
+            <p>For non-support questions and conversations about AMI.</p>
             <a href="mailto:hello@storiesbyami.com">hello@storiesbyami.com</a>
           </article>
           <article>
-            <span>Ami Studio</span>
+            <span>AMI Studio</span>
             <h2>Custom keepsake projects</h2>
             <p>For premium, done-for-you books and personalized gift projects.</p>
             <a href="mailto:studio@storiesbyami.com">studio@storiesbyami.com</a>

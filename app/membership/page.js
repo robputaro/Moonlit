@@ -45,10 +45,10 @@ export default function MembershipPage() {
     setMessage('');
     try {
       const accessToken = await token();
-      if (!accessToken) throw new Error('Sign in from the Ami home page first.');
+      if (!accessToken) throw new Error('Sign in from the AMI home page first.');
       const response = await fetch(path, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Ami could not continue.');
+      if (!response.ok) throw new Error(data.error || 'AMI could not continue.');
       window.location.href = data.url;
     } catch (error) {
       setMessage(error.message);
@@ -65,7 +65,7 @@ export default function MembershipPage() {
     <main className="platform-page membership-page">
       <div className="platform-shell membership-shell">
         <header className="membership-hero">
-          <Link href="/" className="membership-back">← Stories by Ami</Link>
+          <Link href="/" className="membership-back">← Back to AMI</Link>
           <span className="platform-kicker">Stories for the moments you are living now</span>
           <h1>Two new personalized stories every month.</h1>
           <p>Create one for a real-life moment and one purely for fun. Save every story, read it anywhere, and turn your favorites into printed keepsakes.</p>
@@ -86,7 +86,7 @@ export default function MembershipPage() {
               {active ? <button type="button" onClick={() => startAction('/api/billing/portal')} disabled={actionLoading}>{actionLoading ? 'Opening…' : 'Manage membership'}</button> : <button type="button" className="membership-join-button" onClick={() => startAction('/api/billing/checkout')} disabled={actionLoading}>{actionLoading ? 'Opening secure checkout…' : 'Join AMI Membership'}</button>}
             </div>
           ) : (
-            <div className="membership-account-panel"><p>Sign in on the Ami home page, then return here to start your membership.</p><Link className="membership-signin-link" href="/">Sign in or create an account</Link></div>
+            <div className="membership-account-panel"><p>Sign in on the AMI home page, then return here to start your membership.</p><Link className="membership-signin-link" href="/">Sign in or create an account</Link></div>
           )}
           {message && <div className="membership-message">{message}</div>}
           <small>Cancel anytime. Cancellation takes effect at the end of the current billing period.</small>

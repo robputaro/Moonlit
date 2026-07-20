@@ -76,7 +76,7 @@ function writeStoryDraft(payload) {
   try {
     window.localStorage.setItem(AMI_DRAFT_KEY, JSON.stringify({ ...payload, savedAt: new Date().toISOString() }));
   } catch (error) {
-    console.warn('Ami could not save the local story draft:', error);
+    console.warn('AMI could not save the local story draft:', error);
   }
 }
 
@@ -408,13 +408,13 @@ export default function Home() {
         : await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
       if (result.error) throw result.error;
       if (authMode === 'signup' && !result.data.session) {
-        setAuthMessage('Check your email to confirm your account, then return to Ami.');
+        setAuthMessage('Check your email to confirm your account, then return to AMI.');
       } else {
         setAuthMessage('You’re signed in.');
         setAuthOpen(false);
       }
     } catch (err) {
-      setAuthMessage(err.message || 'Ami could not sign you in.');
+      setAuthMessage(err.message || 'AMI could not sign you in.');
     } finally {
       setAuthLoading(false);
     }
@@ -434,7 +434,7 @@ export default function Home() {
       });
       if (googleError) throw googleError;
     } catch (err) {
-      setAuthMessage(err.message || 'Ami could not start Google sign-in.');
+      setAuthMessage(err.message || 'AMI could not start Google sign-in.');
       setAuthLoading(false);
     }
   }
@@ -631,7 +631,7 @@ export default function Home() {
       setSaveMessage(`${localStories.length} local ${localStories.length === 1 ? 'story' : 'stories'} added to your account`);
     } catch (err) {
       console.error(err);
-      setError('Ami could not import every local story. Your originals are still safe in this browser.');
+      setError('AMI could not import every local story. Your originals are still safe in this browser.');
     } finally {
       setImportingStories(false);
     }
@@ -680,7 +680,7 @@ export default function Home() {
       setReferencePhotoAnalysis(null);
       await analyzeReferencePhoto(prepared);
     } catch (photoError) {
-      setError(photoError.message || 'Ami could not use that photo.');
+      setError(photoError.message || 'AMI could not use that photo.');
     } finally {
       event.target.value = '';
     }
@@ -694,7 +694,7 @@ export default function Home() {
   async function generateStory(event) {
     event.preventDefault();
     if (supabaseConfigured && !user) {
-      requestSignIn('Create a free Ami account before generating so this story can stay on your shelf.');
+      requestSignIn('Create a free AMI account before generating so this story can stay on your shelf.');
       return;
     }
     setLoading(true);
@@ -898,7 +898,7 @@ export default function Home() {
       }
     } catch (err) {
       console.error(err);
-      setError('Ami could not open your story shelf. Check the Supabase setup and try again.');
+      setError('AMI could not open your story shelf. Check the Supabase setup and try again.');
     } finally {
       setLibraryLoading(false);
     }
@@ -916,7 +916,7 @@ export default function Home() {
   async function saveToLibrary() {
     if (!story) return;
     if (supabaseConfigured && !user) {
-      requestSignIn('Sign in to save this story to your Ami shelf.');
+      requestSignIn('Sign in to save this story to your AMI shelf.');
       return;
     }
     setError('');
@@ -944,7 +944,7 @@ export default function Home() {
       window.setTimeout(() => setSaveMessage(''), 2400);
     } catch (err) {
       console.error(err);
-      setError('Ami could not save this story. Check your connection and Supabase policies, then try again.');
+      setError('AMI could not save this story. Check your connection and Supabase policies, then try again.');
       setSaveMessage('');
     }
   }
@@ -961,7 +961,7 @@ export default function Home() {
   }
 
   async function deleteSavedStory(id) {
-    if (!window.confirm('Remove this story from your Ami shelf?')) return;
+    if (!window.confirm('Remove this story from your AMI shelf?')) return;
     if (supabaseConfigured) {
       const prefix = `${user.id}/${id}`;
       const { data: assets } = await supabase.storage.from('story-assets').list(prefix);
@@ -969,7 +969,7 @@ export default function Home() {
         await supabase.storage.from('story-assets').remove(assets.map((asset) => `${prefix}/${asset.name}`));
       }
       const { error: deleteError } = await supabase.from('stories').delete().eq('id', id);
-      if (deleteError) setError('Ami could not delete that story.');
+      if (deleteError) setError('AMI could not delete that story.');
     } else {
       await removeSavedStory(id);
     }
@@ -981,7 +981,7 @@ export default function Home() {
 
     const previewWindow = window.open('', '_blank');
     if (!previewWindow) {
-      setError('Your browser blocked the PDF window. Allow pop-ups for Ami and try again.');
+      setError('Your browser blocked the PDF window. Allow pop-ups for AMI and try again.');
       return;
     }
 
@@ -1061,7 +1061,7 @@ export default function Home() {
       pdf.setCharSpace(0);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(31);
-      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Ami Story'), PAGE_W - (SAFE + 8) * 2);
+      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'AMI Story'), PAGE_W - (SAFE + 8) * 2);
       pdf.text(titleLines, SAFE + 8, 625, { lineHeightFactor: 1.03 });
       const titleBottom = 625 + titleLines.length * 32;
       if (story.summary) {
@@ -1252,7 +1252,7 @@ export default function Home() {
       pdf.setTextColor(39, 33, 59);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(30);
-      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Ami Story'), PAGE - 126);
+      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'AMI Story'), PAGE - 126);
       pdf.text(titleLines, PAGE_CENTER, 222, { align: 'center', lineHeightFactor: 1.08 });
       const titleBottom = 222 + titleLines.length * 32;
       pdf.setTextColor(99, 89, 122);
@@ -1433,7 +1433,7 @@ export default function Home() {
       pdf.setTextColor(39, 33, 59);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(14);
-      pdf.text('Stories by Ami · Lulu interior alignment proof', CENTER, 80, { align: 'center' });
+      pdf.text('AMI · Lulu interior alignment proof', CENTER, 80, { align: 'center' });
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(10);
       pdf.text('Red: 8.5 in trim · Purple: content frame · Blue: exact page center', CENTER, 102, { align: 'center' });
@@ -1512,7 +1512,7 @@ export default function Home() {
       pdf.setCharSpace(0);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(27);
-      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'Ami Story'), Math.max(120, PANEL - WRAP_SAFE * 2 - HINGE_SAFE));
+      const titleLines = pdf.splitTextToSize(decodeHtmlEntities(story.title || 'AMI Story'), Math.max(120, PANEL - WRAP_SAFE * 2 - HINGE_SAFE));
       pdf.text(titleLines.slice(0, 4), frontCenter + HINGE_SAFE / 2, H * 0.76, { align: 'center', lineHeightFactor: 1.05 });
       pdf.setFont('times', 'italic');
       pdf.setFontSize(12);
@@ -1538,7 +1538,7 @@ export default function Home() {
       pdf.line(backCenter - 24, H * 0.34, backCenter + 24, H * 0.34);
       pdf.setFont('times', 'normal');
       pdf.setFontSize(12.5);
-      const blurb = decodeHtmlEntities(backCoverBlurb || story.summary || 'A personalized Ami keepsake.');
+      const blurb = decodeHtmlEntities(backCoverBlurb || story.summary || 'A personalized AMI keepsake.');
       const blurbLines = pdf.splitTextToSize(blurb, backWidth);
       pdf.text(blurbLines.slice(0, 10), backX, H * 0.40, { align: 'left', lineHeightFactor: 1.38, maxWidth: backWidth });
       pdf.setTextColor(111, 97, 170);
@@ -1565,7 +1565,7 @@ export default function Home() {
         pdf.setTextColor(255, 255, 255);
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(Math.min(10, Math.max(7, SPINE * 0.34)));
-        pdf.text(decodeHtmlEntities(story.title || 'Ami Story').slice(0, 54), PANEL + SPINE / 2, H / 2, { align: 'center', angle: 90, maxWidth: H - WRAP_SAFE * 2 });
+        pdf.text(decodeHtmlEntities(story.title || 'AMI Story').slice(0, 54), PANEL + SPINE / 2, H / 2, { align: 'center', angle: 90, maxWidth: H - WRAP_SAFE * 2 });
       }
 
       const safeName = String(decodeHtmlEntities(story.title || 'ami-story'))
@@ -1590,7 +1590,7 @@ export default function Home() {
       </header>
 
       <section className="shell">
-        {user && localImportCount > 0 && <div className="import-banner"><div><strong>Bring your earlier stories with you.</strong><span>Ami found {localImportCount} {localImportCount === 1 ? 'story' : 'stories'} saved in this browser.</span></div><button type="button" onClick={importLocalStories} disabled={importingStories}>{importingStories ? 'Importing…' : 'Add to my account'}</button></div>}
+        {user && localImportCount > 0 && <div className="import-banner"><div><strong>Bring your earlier stories with you.</strong><span>AMI found {localImportCount} {localImportCount === 1 ? 'story' : 'stories'} saved in this browser.</span></div><button type="button" onClick={importLocalStories} disabled={importingStories}>{importingStories ? 'Importing…' : 'Add to my account'}</button></div>}
         {step !== 'library' && <div className="progress-row" aria-label="Progress">
           {['Create', 'Review', 'Read'].map((label, index) => (
             <div className={`progress-item ${progress >= index + 1 ? 'active' : ''}`} key={label}>
@@ -1869,7 +1869,7 @@ export default function Home() {
         )}
 
         {authOpen && <div className="auth-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setAuthOpen(false); }}>
-          <section className="auth-modal" role="dialog" aria-modal="true" aria-label="Ami account">
+          <section className="auth-modal" role="dialog" aria-modal="true" aria-label="AMI account">
             <button type="button" className="auth-close" onClick={() => setAuthOpen(false)} aria-label="Close">×</button>
             <div className="auth-moon">a</div>
             <div className="eyebrow">Keep their stories close</div>

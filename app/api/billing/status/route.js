@@ -26,6 +26,6 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error('Billing status failed:', error);
-    return NextResponse.json({ error: 'Ami could not load membership details.' }, { status: 500 });
+    return NextResponse.json({ error: 'AMI could not load membership details.' }, { status: 500 });
   }
 }

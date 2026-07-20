@@ -10,7 +10,7 @@ export default function ShippingPage() {
     <PolicyPage
       kicker="Printed keepsakes"
       title="Shipping and Printed Books"
-      intro="Printed Ami books are produced on demand after the final version is approved and payment is complete."
+      intro="Printed AMI books are produced on demand after the final version is approved and payment is complete."
     >
       <section>
         <h2>Production</h2>

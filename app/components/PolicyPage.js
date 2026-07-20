@@ -6,7 +6,7 @@ export default function PolicyPage({ kicker, title, intro, children }) {
     <main className="policy-page">
       <div className="policy-shell">
         <header className="policy-header">
-          <Link href="/" className="policy-back">← Stories by Ami</Link>
+          <Link href="/" className="policy-back">← Back to AMI</Link>
           <span className="platform-kicker">{kicker}</span>
           <h1>{title}</h1>
           {intro && <p>{intro}</p>}

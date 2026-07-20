@@ -5,7 +5,7 @@ export default function SiteFooter() {
     <footer className="site-trust-footer">
       <div className="site-trust-footer-inner">
         <div className="footer-brand-block">
-          <Link href="/" className="footer-brand">Stories by Ami</Link>
+          <Link href="/" className="footer-brand">AMI</Link>
           <p>Personalized digital and printed stories made from their world.</p>
         </div>
         <nav className="footer-links" aria-label="Policies and support">

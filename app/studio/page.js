@@ -79,9 +79,9 @@ export default function StudioPage() {
       <main className="platform-page">
         <div className="platform-shell platform-gate">
           <span className="platform-kicker">AMI Studio</span>
-          <h1>Sign in to Ami first.</h1>
-          <p>Studio is reserved for the Ami production team.</p>
-          <Link className="platform-primary" href="/">Return to Stories by Ami</Link>
+          <h1>Sign in to AMI first.</h1>
+          <p>Studio is reserved for the AMI production team.</p>
+          <Link className="platform-primary" href="/">Return to AMI</Link>
         </div>
       </main>
     );
@@ -94,7 +94,7 @@ export default function StudioPage() {
           <span className="platform-kicker">AMI Studio</span>
           <h1>This account does not have Studio access.</h1>
           <p>Signed in as {user.email}</p>
-          <Link className="platform-primary" href="/">Return to Stories by Ami</Link>
+          <Link className="platform-primary" href="/">Return to AMI</Link>
         </div>
       </main>
     );
@@ -110,7 +110,7 @@ export default function StudioPage() {
             <p>Create Etsy and premium orders, manage proofs, and prepare approved books for print.</p>
           </div>
           <div className="studio-header-actions">
-            <Link href="/">Public Ami</Link>
+            <Link href="/">Public AMI</Link>
             <button type="button" disabled title="Project intake arrives in Studio v1.1">New project</button>
           </div>
         </header>
@@ -141,7 +141,7 @@ export default function StudioPage() {
             <div className="studio-order-list">
               {orders.map((order) => (
                 <article key={order.id}>
-                  <div><small>{order.source || 'Ami'} · {order.product_type || 'Keepsake'}</small><h3>{order.child_name || 'Untitled child project'}</h3><p>{order.customer_name || 'Customer details pending'}</p></div>
+                  <div><small>{order.source || 'AMI'} · {order.product_type || 'Keepsake'}</small><h3>{order.child_name || 'Untitled child project'}</h3><p>{order.customer_name || 'Customer details pending'}</p></div>
                   <div><span className="studio-status">{String(order.status || 'new_order').replaceAll('_', ' ')}</span><small>{order.due_date ? `Due ${new Date(order.due_date).toLocaleDateString()}` : 'No due date'}</small></div>
                 </article>
               ))}

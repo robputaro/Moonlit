@@ -6,7 +6,7 @@ export async function POST(request) {
     const auth = await getAuthenticatedBillingUser(request);
     if (!auth.user) return NextResponse.json({ error: 'Please sign in before starting a membership.' }, { status: 401 });
     const priceId = process.env.STRIPE_AMI_MONTHLY_PRICE_ID;
-    if (!priceId) return NextResponse.json({ error: 'The Ami membership price is not configured yet.' }, { status: 503 });
+    if (!priceId) return NextResponse.json({ error: 'The AMI membership price is not configured yet.' }, { status: 503 });
     const admin = getAdminClient();
     const { data: existing } = await admin.from('subscriptions').select('stripe_customer_id,status').eq('user_id', auth.user.id).maybeSingle();
     if (['active', 'trialing', 'past_due'].includes(existing?.status)) {
@@ -30,6 +30,6 @@ export async function POST(request) {
     return NextResponse.json({ url: session.url });
   } catch (error) {
     console.error('Checkout session failed:', error);
-    return NextResponse.json({ error: error.message || 'Ami could not start checkout.' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'AMI could not start checkout.' }, { status: 500 });
   }
 }

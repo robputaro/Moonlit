@@ -19,7 +19,7 @@ export default function PrivacyPage() {
 
       <section>
         <h2>Information we collect</h2>
-        <p>Depending on how you use Ami, we may collect:</p>
+        <p>Depending on how you use AMI, we may collect:</p>
         <ul>
           <li>Account information, such as your name, email address, and login details.</li>
           <li>Story details you provide, including a child’s first name or nickname, age, interests, appearance notes, family details, pets, dedication text, and story preferences.</li>
@@ -44,12 +44,12 @@ export default function PrivacyPage() {
 
       <section>
         <h2>AI-assisted creation</h2>
-        <p>Ami uses third-party artificial-intelligence services to help generate and analyze story content and illustrations. Information included in a story request, including an optional reference photo or appearance description, may be transmitted to those providers solely to perform the requested generation. AI-generated text and images may contain mistakes or inconsistencies, so adults should review every page before sharing or ordering a printed copy.</p>
+        <p>AMI uses third-party artificial-intelligence services to help generate and analyze story content and illustrations. Information included in a story request, including an optional reference photo or appearance description, may be transmitted to those providers solely to perform the requested generation. AI-generated text and images may contain mistakes or inconsistencies, so adults should review every page before sharing or ordering a printed copy.</p>
       </section>
 
       <section>
         <h2>Service providers</h2>
-        <p>We use service providers to operate Ami, including hosting, authentication, storage, analytics, AI generation, payment processing, email, printing, and fulfillment. These providers may process information on our behalf according to their own terms and privacy practices. Current providers may include Vercel, Supabase, Google, Anthropic, OpenAI, Stripe, and Lulu.</p>
+        <p>We use service providers to operate AMI, including hosting, authentication, storage, analytics, AI generation, payment processing, email, printing, and fulfillment. These providers may process information on our behalf according to their own terms and privacy practices. Current providers may include Vercel, Supabase, Google, Anthropic, OpenAI, Stripe, and Lulu.</p>
       </section>
 
       <section>

@@ -14,6 +14,6 @@ export async function POST(request) {
     return NextResponse.json({ url: session.url });
   } catch (error) {
     console.error('Portal session failed:', error);
-    return NextResponse.json({ error: error.message || 'Ami could not open membership management.' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'AMI could not open membership management.' }, { status: 500 });
   }
 }

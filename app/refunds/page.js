@@ -10,7 +10,7 @@ export default function RefundsPage() {
     <PolicyPage
       kicker="Purchases"
       title="Refunds and Cancellations"
-      intro="Because Ami products are personalized, refund eligibility depends on whether generation, approval, or physical production has begun."
+      intro="Because AMI products are personalized, refund eligibility depends on whether generation, approval, or physical production has begun."
     >
       <section>
         <h2>Digital stories</h2>
@@ -39,7 +39,7 @@ export default function RefundsPage() {
       </section>
 
       <section>
-        <h2>Ami Studio projects</h2>
+        <h2>AMI Studio projects</h2>
         <p>Human-created Studio work may include nonrefundable creative or production fees once work begins. Any included revision limit, proof deadline, deposit, and cancellation terms will be stated in the applicable listing, invoice, or order confirmation.</p>
       </section>
     </PolicyPage>

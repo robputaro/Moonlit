@@ -235,7 +235,7 @@ export async function POST(request) {
       });
       if (reserveError) {
         if (reserveError.message?.includes('NO_STORY_CREDITS')) {
-          return NextResponse.json({ error: 'You need a story credit to create this book. Join Ami Membership or wait for your next monthly credits.', code: 'NO_STORY_CREDITS' }, { status: 402 });
+          return NextResponse.json({ error: 'You need a story credit to create this book. Join AMI Membership or wait for your next monthly credits.', code: 'NO_STORY_CREDITS' }, { status: 402 });
         }
         throw reserveError;
       }

@@ -19,7 +19,7 @@ export default function TermsPage() {
 
       <section>
         <h2>Personalized content</h2>
-        <p>Ami creates customized story text and illustrations from the information you provide. You are responsible for reviewing names, spelling, story details, translations, illustrations, and personalization before downloading, sharing, approving, or ordering a physical copy. AI-generated content may be imperfect, inconsistent, or unexpected.</p>
+        <p>AMI creates customized story text and illustrations from the information you provide. You are responsible for reviewing names, spelling, story details, translations, illustrations, and personalization before downloading, sharing, approving, or ordering a physical copy. AI-generated content may be imperfect, inconsistent, or unexpected.</p>
       </section>
 
       <section>
@@ -30,12 +30,12 @@ export default function TermsPage() {
 
       <section>
         <h2>Generated stories and permitted use</h2>
-        <p>Once paid for or included through an active plan, completed stories are licensed to you for personal and family use, including reading, gifting, and printing through approved Ami workflows. You may not resell, mass distribute, sublicense, or commercially publish generated books without written permission.</p>
+        <p>Once paid for or included through an active plan, completed stories are licensed to you for personal and family use, including reading, gifting, and printing through approved AMI workflows. You may not resell, mass distribute, sublicense, or commercially publish generated books without written permission.</p>
       </section>
 
       <section>
         <h2>Memberships and credits</h2>
-        <p>Ami Membership is planned at $9.99 per month and includes two digital story credits per successful billing period, with unused credits rolling over up to a balance of four. Each successfully generated book uses one credit. Failed generations should not permanently consume a credit. Included regeneration limits and member print pricing may be displayed at checkout or on the Membership page.</p>
+        <p>AMI Membership is planned at $9.99 per month and includes two digital story credits per successful billing period, with unused credits rolling over up to a balance of four. Each successfully generated book uses one credit. Failed generations should not permanently consume a credit. Included regeneration limits and member print pricing may be displayed at checkout or on the Membership page.</p>
         <p>Memberships renew automatically until canceled. Cancellation stops future renewals but does not retroactively refund completed billing periods. Completed stories remain available subject to account and service availability. Final billing terms will be shown during Stripe checkout before payment.</p>
       </section>
 
@@ -51,7 +51,7 @@ export default function TermsPage() {
 
       <section>
         <h2>Pricing, taxes, and shipping</h2>
-        <p>Prices, discounts, printing costs, shipping charges, and availability may change. Applicable taxes and shipping are shown during checkout. Member discounts apply only while the membership is active and do not necessarily apply to Ami Studio services or custom manual work.</p>
+        <p>Prices, discounts, printing costs, shipping charges, and availability may change. Applicable taxes and shipping are shown during checkout. Member discounts apply only while the membership is active and do not necessarily apply to AMI Studio services or custom manual work.</p>
       </section>
 
       <section>
@@ -61,7 +61,7 @@ export default function TermsPage() {
 
       <section>
         <h2>Disclaimers and limitation</h2>
-        <p>Ami stories are creative products and are not medical, psychological, educational, or therapeutic advice. To the fullest extent permitted by law, the service is provided “as is,” and Stories by Ami is not liable for indirect, incidental, or consequential losses arising from use of the service.</p>
+        <p>AMI stories are creative products and are not medical, psychological, educational, or therapeutic advice. To the fullest extent permitted by law, the service is provided “as is,” and Stories by Ami is not liable for indirect, incidental, or consequential losses arising from use of the service.</p>
       </section>
 
       <section>
