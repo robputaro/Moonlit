@@ -1345,3 +1345,68 @@ html[data-theme="dark"] .ami-header-logo{
 
 @media(max-width:820px){.ami-referral-hub{grid-template-columns:auto 1fr}.ami-referral-hub-actions{grid-column:1/-1}.ami-mini-complete{grid-template-columns:auto 1fr}.ami-mini-complete-actions{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr}.ami-mini-complete-actions a{grid-column:1/-1}}
 @media(max-width:560px){.ami-referral-hub{grid-template-columns:1fr;text-align:left}.ami-referral-hub-icon{width:42px;height:42px}.ami-mini-complete{grid-template-columns:1fr}.ami-mini-complete-art{width:48px;height:48px}.ami-mini-complete-actions{display:flex}}
+
+/* AMI visual storybook style cards */
+.style-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 16px !important;
+}
+.style-choice {
+  padding: 10px 10px 14px !important;
+  border-radius: 18px !important;
+  overflow: hidden;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.style-choice:hover { transform: translateY(-2px); }
+.style-choice.selected {
+  border-color: var(--ml-accent, #6d5bb7) !important;
+  box-shadow: 0 0 0 3px rgba(109,91,183,.16), 0 18px 40px rgba(52,43,90,.12) !important;
+}
+.style-preview {
+  height: auto !important;
+  aspect-ratio: 2.08 / 1 !important;
+  margin-bottom: 12px !important;
+  border-radius: 12px !important;
+  background: #e9e4f3 !important;
+}
+.style-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.style-choice-copy {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 3px 5px;
+}
+.style-choice-copy strong {
+  font-family: 'Playfair Display', serif;
+  font-size: 16px;
+  line-height: 1.12;
+  color: var(--ml-heading, var(--deep));
+}
+.style-choice-copy span {
+  flex: 0 0 auto;
+  max-width: 46%;
+  padding: 5px 7px;
+  border-radius: 999px;
+  background: rgba(105,88,176,.1);
+  color: var(--ml-accent, #6254a4);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
+}
+.style-choice > small {
+  margin: 0 3px !important;
+  font-size: 11px !important;
+  line-height: 1.45 !important;
+}
+@media (max-width: 680px) {
+  .style-grid { grid-template-columns: 1fr !important; }
+  .style-choice-copy strong { font-size: 18px; }
+  .style-choice-copy span { font-size: 10px; }
+}

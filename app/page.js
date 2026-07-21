@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, supabaseConfigured } from '../lib/supabase-browser';
 import SiteFooter from './components/SiteFooter';
+import { AMI_STYLES, normalizeAmiStyle } from '../lib/ami-styles';
 
 const challenges = [
   ['Giving up the pacifier', 'A gentle goodbye to a familiar comfort'],
@@ -28,11 +29,7 @@ const funModes = [
   ['Family Memory', 'Turn a real moment into a keepsake']
 ];
 
-const styles = [
-  ['Watercolor', 'Soft and dreamy'],
-  ['Picture Book', 'Bright and playful'],
-  ['Paper Cutout', 'Textured and whimsical']
-];
+const styles = AMI_STYLES;
 
 const storyLoadingMessages = [
   'Learning about your child…',
@@ -249,7 +246,7 @@ const emptyForm = {
   storyIdea: '',
   favorites: '',
   lesson: '',
-  style: 'Watercolor',
+  style: 'Cozy Classic',
   length: '10',
   productType: 'full'
 };
@@ -2019,12 +2016,16 @@ export default function Home() {
               <div className="divider"></div>
               <div className="section-heading"><span>3</span><div><h2>Pick the storybook look</h2><p>This becomes the visual direction for every page.</p></div></div>
               <div className="style-grid">
-                {styles.map(([name, description], index) => (
-                  <button type="button" key={name} className={`style-choice style-${index} ${form.style === name ? 'selected' : ''}`} onClick={() => update('style', name)}>
-                    <div className="style-preview"><span>☁</span><b>⌂</b></div>
-                    <strong>{name}</strong><small>{description}</small>
-                  </button>
-                ))}
+                {styles.map((style) => {
+                  const selected = normalizeAmiStyle(form.style) === style.id;
+                  return (
+                    <button type="button" key={style.id} className={`style-choice ${selected ? 'selected' : ''}`} onClick={() => update('style', style.id)} aria-pressed={selected}>
+                      <div className="style-preview"><img src={style.preview} alt={`${style.id} storybook style sample`} loading="lazy" /></div>
+                      <div className="style-choice-copy"><strong>{style.id}</strong><span>{style.bestFor}</span></div>
+                      <small>{style.description}</small>
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="ami-product-choice">

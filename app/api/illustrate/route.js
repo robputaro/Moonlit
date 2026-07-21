@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { authenticateRequest } from '../../../lib/supabase-server';
 import { estimateImageCostMicros, recordAiUsage } from '../../../lib/ai-tracking';
+import { getAmiStylePrompt, normalizeAmiStyle } from '../../../lib/ami-styles';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -29,7 +30,8 @@ function buildImagePrompt({ storyTitle, style, characterBible, page, kind }) {
 
 BOOK: ${storyTitle || 'AMI Story'}
 IMAGE TYPE: ${kind === 'cover' ? 'front cover artwork without any words' : 'interior story page'}
-ART DIRECTION: ${style || 'soft watercolor picture-book illustration'}
+STYLE NAME: ${normalizeAmiStyle(style)}
+ART DIRECTION: ${getAmiStylePrompt(style)}
 
 LOCKED MAIN CHARACTER:
 ${character}
