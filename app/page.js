@@ -288,6 +288,8 @@ export default function Home() {
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false);
   const [billingStatus, setBillingStatus] = useState(null);
   const [referralStatus, setReferralStatus] = useState(null);
+  const [referralLoading, setReferralLoading] = useState(false);
+  const [referralError, setReferralError] = useState('');
   const [referralMessage, setReferralMessage] = useState('');
   const [draftMessage, setDraftMessage] = useState('');
   const [draftReady, setDraftReady] = useState(false);
@@ -497,12 +499,20 @@ export default function Home() {
   }
 
   async function refreshReferralStatus() {
-    if (!user || !supabaseConfigured) { setReferralStatus(null); return; }
+    if (!user || !supabaseConfigured) { setReferralStatus(null); setReferralError(''); return; }
+    setReferralLoading(true);
+    setReferralError('');
     try {
       const token = await getAccessToken();
       const response = await fetch('/api/referrals/status', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
-      if (response.ok) setReferralStatus(await response.json());
-    } catch {}
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'AMI could not load your referral link.');
+      setReferralStatus(data);
+    } catch (statusError) {
+      setReferralError(statusError.message || 'AMI could not load your referral link.');
+    } finally {
+      setReferralLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -1046,6 +1056,9 @@ export default function Home() {
       setStory((current) => ({ ...current, generationStatus: 'complete' }));
       await autosaveStorySnapshot(completedStory, { id: storyId, status: 'complete', message: 'Book saved automatically' });
       await refreshLibrary();
+      if (completedStory.productType === 'mini') {
+        setTimeout(() => document.getElementById('ami-mini-complete')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
+      }
     } finally {
       setGeneratingAll(false);
       setGenerationAllProgress({ current: 0, total: 0 });
@@ -1757,6 +1770,43 @@ export default function Home() {
     }
   }
 
+  async function copyReferralLink() {
+    if (!referralStatus?.referralUrl) return;
+    try {
+      await navigator.clipboard.writeText(referralStatus.referralUrl);
+      setReferralMessage('Referral link copied.');
+    } catch {
+      setReferralMessage('Copy this link: ' + referralStatus.referralUrl);
+    }
+  }
+
+  function startFullVersionFromMini() {
+    setForm((current) => ({ ...current, productType: 'full', length: current.length === '3' ? '10' : current.length }));
+    setStory(null);
+    setStoryId(null);
+    setStep('create');
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 50);
+  }
+
+  const referralPanel = user ? (
+    <section className="ami-referral-hub" id="ami-referrals" aria-label="AMI referrals">
+      <div className="ami-referral-hub-icon" aria-hidden="true">✦</div>
+      <div className="ami-referral-hub-copy">
+        <span>SHARE AMI</span>
+        <strong>Give a friend their first Mini Story free.</strong>
+        <p>When they become a paid AMI member, you receive one full story credit.</p>
+        {referralStatus?.referralStats && <small>{referralStatus.referralStats.signedUp || 0} signups · {referralStatus.referralStats.rewarded || 0} bonus credits earned</small>}
+        {referralError && <small className="ami-referral-error">{referralError}</small>}
+      </div>
+      <div className="ami-referral-hub-actions">
+        {referralStatus?.referralUrl ? <>
+          <code>{referralStatus.referralUrl}</code>
+          <button type="button" onClick={copyReferralLink}>Copy referral link</button>
+        </> : <button type="button" onClick={refreshReferralStatus} disabled={referralLoading}>{referralLoading ? 'Preparing your link…' : 'Create my referral link'}</button>}
+      </div>
+    </section>
+  ) : null;
+
   return (
     <main>
       <header className="site-header">
@@ -1775,6 +1825,8 @@ export default function Home() {
             </div>
           ))}
         </div>}
+        {(step === 'create' || step === 'library') && referralPanel}
+        {referralMessage && (step === 'create' || step === 'library') && <div className="save-message ami-referral-message">{referralMessage}</div>}
 
         {step === 'create' && (
           <div className="create-grid">
@@ -1890,9 +1942,6 @@ export default function Home() {
                   <div className="generation-note">Your story will be generated as an editable draft before any illustrations are created.</div>
                 </div>
               )}
-              {user && referralStatus?.referralUrl && <div className="ami-referral-card"><div><span>Invite someone to AMI</span><strong>Earn 1 full story credit after their first paid membership invoice.</strong><small>{referralStatus.referralStats?.signedUp || 0} signups · {referralStatus.referralStats?.rewarded || 0} bonus credits earned</small></div><button type="button" onClick={async () => { await navigator.clipboard.writeText(referralStatus.referralUrl); setReferralMessage('Referral link copied.'); }}>Copy referral link</button></div>}
-              {referralMessage && <div className="save-message">{referralMessage}</div>}
-
               {draftMessage && <div className="draft-restored"><strong>Welcome back.</strong><span>{draftMessage}</span><button type="button" onClick={() => { window.localStorage.removeItem(AMI_DRAFT_KEY); setForm(emptyForm); setReferencePhoto(''); setReferencePhotoAnalysis(null); setDraftMessage(''); }}>Start fresh</button></div>}
               {loading && <div className="ami-generation-stage" role="status" aria-live="polite"><div className="ami-generation-orbit"><span>✦</span></div><div><strong>{loadingMessage || 'Writing your story…'}</strong><p>AMI is shaping the story, planning distinct scenes, and preparing an editable draft. Keep this tab open for a moment.</p><div className="ami-generation-steps"><span className="done">Story details</span><span className={loadingMessage?.includes('page') || loadingMessage?.includes('ready') ? 'done' : ''}>Story arc</span><span className={loadingMessage?.includes('ready') ? 'done' : ''}>Page plan</span></div></div></div>}
               {error && <div className="error">{error}</div>}
@@ -1909,6 +1958,11 @@ export default function Home() {
               <div><div className="eyebrow">Your story draft</div><h1>{decodeHtmlEntities(story.title)}</h1><p>{decodeHtmlEntities(story.summary)}</p></div>
               <div className="header-actions"><button className="ghost" onClick={() => setStep('create')}>Edit setup</button><button className="ghost" onClick={generateCover} disabled={coverLoading || (story.productType === 'mini' && Boolean(story.coverImageUrl))}>{coverLoading ? 'Creating cover…' : story.coverImageUrl ? (story.productType === 'mini' ? 'Mini cover complete' : 'Regenerate cover') : 'Generate cover'}</button><button className="ghost" onClick={generateAllImages} disabled={generatingAll}>{generatingAll ? 'Illustrating pages…' : 'Generate all images'}</button><button className="primary-small" onClick={() => setStep('read')}>Open storybook →</button></div>
             </div>
+            {story.productType === 'mini' && story.generationStatus === 'complete' && <section className="ami-mini-complete" id="ami-mini-complete">
+              <div className="ami-mini-complete-art" aria-hidden="true">✦</div>
+              <div className="ami-mini-complete-copy"><span>YOUR AMI MINI STORY IS READY</span><h2>Love the beginning? Continue the adventure.</h2><p>Create a full illustrated story using the same child, theme, style, and details—or explore AMI Membership for two full story credits each month.</p></div>
+              <div className="ami-mini-complete-actions"><button type="button" className="primary-small" onClick={() => setStep('read')}>Read my Mini Story</button><button type="button" className="ghost" onClick={startFullVersionFromMini}>Create the full story</button><a href="/membership">Explore AMI Membership</a></div>
+            </section>}
             <div className="story-meta">
               <div><small>Starring</small><strong>{story.characterBible?.name}</strong></div>
               <div><small>Visual style</small><strong>{form.style}</strong></div>
