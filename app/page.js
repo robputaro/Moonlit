@@ -245,7 +245,8 @@ const emptyForm = {
   favorites: '',
   lesson: '',
   style: 'Watercolor',
-  length: '10'
+  length: '10',
+  productType: 'full'
 };
 
 export default function Home() {
@@ -286,6 +287,8 @@ export default function Home() {
   const [referencePhotoAnalysis, setReferencePhotoAnalysis] = useState(null);
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false);
   const [billingStatus, setBillingStatus] = useState(null);
+  const [referralStatus, setReferralStatus] = useState(null);
+  const [referralMessage, setReferralMessage] = useState('');
   const [draftMessage, setDraftMessage] = useState('');
   const [draftReady, setDraftReady] = useState(false);
   const [generationAllProgress, setGenerationAllProgress] = useState({ current: 0, total: 0 });
@@ -493,8 +496,40 @@ export default function Home() {
     } catch {}
   }
 
+  async function refreshReferralStatus() {
+    if (!user || !supabaseConfigured) { setReferralStatus(null); return; }
+    try {
+      const token = await getAccessToken();
+      const response = await fetch('/api/referrals/status', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+      if (response.ok) setReferralStatus(await response.json());
+    } catch {}
+  }
+
   useEffect(() => {
     refreshBillingStatus();
+    refreshReferralStatus();
+  }, [user]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const code = new URLSearchParams(window.location.search).get('ref');
+    if (code) window.localStorage.setItem('ami-referral-code-v1', code);
+  }, []);
+
+  useEffect(() => {
+    if (!user || !supabaseConfigured) return;
+    const code = window.localStorage.getItem('ami-referral-code-v1');
+    if (!code) return;
+    authenticatedFetch('/api/referrals/capture', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code })
+    }).then(async (response) => {
+      if (response.ok) {
+        const data = await response.json();
+        if (data.captured) setReferralMessage('Referral connected. Your friend will receive a bonus credit after your first paid membership invoice.');
+        window.localStorage.removeItem('ami-referral-code-v1');
+        refreshReferralStatus();
+      }
+    }).catch(() => {});
   }, [user]);
 
   async function signedAssetUrl(path) {
@@ -721,16 +756,17 @@ export default function Home() {
       const activePhotoAnalysis = referencePhoto
         ? (referencePhotoAnalysis || await analyzeReferencePhoto(referencePhoto))
         : null;
-      const generationInput = form.storyMode === 'Fun'
+      const normalizedForm = form.productType === 'mini' ? { ...form, length: '3' } : form;
+      const generationInput = normalizedForm.storyMode === 'Fun'
         ? {
-            ...form,
+            ...normalizedForm,
             challenge: '',
             emotionalOutcome: '',
             storyMode: 'Fun',
             referencePhotoAnalysis: activePhotoAnalysis
           }
         : {
-            ...form,
+            ...normalizedForm,
             storyMode: 'Challenge',
             referencePhotoAnalysis: activePhotoAnalysis
           };
@@ -747,7 +783,10 @@ export default function Home() {
         referencePhotoUrl: referencePhoto || '',
         referencePhotoAnalysis: activePhotoAnalysis,
         createdAt: new Date().toISOString(),
-        generationStatus: 'writing'
+        generationStatus: 'writing',
+        productType: generationInput.productType === 'mini' ? 'mini' : 'full',
+        printEligible: generationInput.productType !== 'mini',
+        regenerationsAllowed: generationInput.productType !== 'mini'
       };
       setStory(startingStory);
       await autosaveStorySnapshot(startingStory, { id: persistentStoryId, status: 'writing', silent: true });
@@ -778,6 +817,7 @@ export default function Home() {
       generateEngagementPack(generatedStory, persistentStoryId).catch(() => {});
       setStep('review');
       setPageIndex(0);
+      refreshReferralStatus();
       window.localStorage.removeItem(AMI_DRAFT_KEY);
       setDraftMessage('');
     } catch (err) {
@@ -803,6 +843,7 @@ export default function Home() {
   async function generateImageForPage(index) {
     const page = story?.pages?.[index];
     if (!page || imageLoading[index]) return;
+    if (story?.productType === 'mini' && page.imageUrl) { setError('AMI Mini Stories include one illustration per page and do not include regenerations.'); return; }
 
     setImageLoading((current) => ({ ...current, [index]: true }));
     setImageLoadingMessage((current) => ({ ...current, [index]: imageLoadingMessages[0] }));
@@ -850,6 +891,7 @@ export default function Home() {
 
   async function generateCover() {
     if (!story || coverLoading) return;
+    if (story?.productType === 'mini' && story.coverImageUrl) { setError('AMI Mini Stories include one cover and do not include regenerations.'); return; }
     setCoverLoading(true);
     setError('');
     try {
@@ -1832,15 +1874,29 @@ export default function Home() {
                 ))}
               </div>
 
-              <div className="field-grid two bottom-fields">
-                <label>Book length<select value={form.length} onChange={(e) => update('length', e.target.value)}><option value="5">Quick story · 5 pages</option><option value="10">Bedtime story · 10 pages</option><option value="16">Full storybook · 16 pages</option></select></label>
-                <div className="generation-note">Your story will be generated as an editable draft before any illustrations are created.</div>
+              <div className="ami-product-choice">
+                <button type="button" className={form.productType === 'mini' ? 'selected' : ''} onClick={() => setForm((current) => ({ ...current, productType: 'mini', length: '3' }))} disabled={Boolean(user && referralStatus && !referralStatus.miniAvailable)}>
+                  <span>Free first experience</span><strong>AMI Mini Story</strong><small>1 cover + 3 illustrated pages · one per verified account</small>
+                </button>
+                <button type="button" className={form.productType !== 'mini' ? 'selected' : ''} onClick={() => setForm((current) => ({ ...current, productType: 'full', length: current.length === '3' ? '10' : current.length }))}>
+                  <span>Full experience</span><strong>Full AMI Story</strong><small>Use 1 story credit · editable and print-eligible</small>
+                </button>
               </div>
+              {form.productType === 'mini' ? (
+                <div className="ami-mini-note"><strong>Your free AMI Mini Story includes 3 illustrated pages.</strong><span>No regenerations or print-production files. Upgrade later to continue the adventure as a full book.</span>{user && referralStatus && !referralStatus.emailVerified && <em>Confirm your email before generating.</em>}{user && referralStatus?.miniStatus === 'used' && <em>This account has already created its free Mini Story.</em>}</div>
+              ) : (
+                <div className="field-grid two bottom-fields">
+                  <label>Book length<select value={form.length} onChange={(e) => update('length', e.target.value)}><option value="5">Quick story · 5 pages</option><option value="10">Bedtime story · 10 pages</option><option value="16">Full storybook · 16 pages</option></select></label>
+                  <div className="generation-note">Your story will be generated as an editable draft before any illustrations are created.</div>
+                </div>
+              )}
+              {user && referralStatus?.referralUrl && <div className="ami-referral-card"><div><span>Invite someone to AMI</span><strong>Earn 1 full story credit after their first paid membership invoice.</strong><small>{referralStatus.referralStats?.signedUp || 0} signups · {referralStatus.referralStats?.rewarded || 0} bonus credits earned</small></div><button type="button" onClick={async () => { await navigator.clipboard.writeText(referralStatus.referralUrl); setReferralMessage('Referral link copied.'); }}>Copy referral link</button></div>}
+              {referralMessage && <div className="save-message">{referralMessage}</div>}
 
               {draftMessage && <div className="draft-restored"><strong>Welcome back.</strong><span>{draftMessage}</span><button type="button" onClick={() => { window.localStorage.removeItem(AMI_DRAFT_KEY); setForm(emptyForm); setReferencePhoto(''); setReferencePhotoAnalysis(null); setDraftMessage(''); }}>Start fresh</button></div>}
               {loading && <div className="ami-generation-stage" role="status" aria-live="polite"><div className="ami-generation-orbit"><span>✦</span></div><div><strong>{loadingMessage || 'Writing your story…'}</strong><p>AMI is shaping the story, planning distinct scenes, and preparing an editable draft. Keep this tab open for a moment.</p><div className="ami-generation-steps"><span className="done">Story details</span><span className={loadingMessage?.includes('page') || loadingMessage?.includes('ready') ? 'done' : ''}>Story arc</span><span className={loadingMessage?.includes('ready') ? 'done' : ''}>Page plan</span></div></div></div>}
               {error && <div className="error">{error}</div>}
-              <button className="primary-button" disabled={loading}>{loading ? loadingMessage || 'Writing your story…' : form.storyMode === 'Challenge' ? 'Create their challenge story' : 'Create my story'}<span>→</span></button>
+              <button className="primary-button" disabled={loading || (form.productType === 'mini' && user && referralStatus && !referralStatus.miniAvailable)}>{loading ? loadingMessage || 'Writing your story…' : form.productType === 'mini' ? 'Create my free Mini Story' : form.storyMode === 'Challenge' ? 'Create their challenge story' : 'Create my story'}<span>→</span></button>
               <p className="privacy-note">Use a first name or nickname. AMI does not need private information about your child.</p>
             </form>
           </div>
@@ -1849,9 +1905,9 @@ export default function Home() {
         {step === 'review' && story && (
           <section className="review-layout">
             <div className="review-header">
-              {story.referencePhotoAnalysis && <div className="photo-personalization-badge">Photo-personalized character</div>}
+              {story.productType === 'mini' && <div className="photo-personalization-badge">Free AMI Mini Story · 3 pages</div>}{story.referencePhotoAnalysis && <div className="photo-personalization-badge">Photo-personalized character</div>}
               <div><div className="eyebrow">Your story draft</div><h1>{decodeHtmlEntities(story.title)}</h1><p>{decodeHtmlEntities(story.summary)}</p></div>
-              <div className="header-actions"><button className="ghost" onClick={() => setStep('create')}>Edit setup</button><button className="ghost" onClick={generateCover} disabled={coverLoading}>{coverLoading ? 'Creating cover…' : story.coverImageUrl ? 'Regenerate cover' : 'Generate cover'}</button><button className="ghost" onClick={generateAllImages} disabled={generatingAll}>{generatingAll ? 'Illustrating pages…' : 'Generate all images'}</button><button className="primary-small" onClick={() => setStep('read')}>Open storybook →</button></div>
+              <div className="header-actions"><button className="ghost" onClick={() => setStep('create')}>Edit setup</button><button className="ghost" onClick={generateCover} disabled={coverLoading || (story.productType === 'mini' && Boolean(story.coverImageUrl))}>{coverLoading ? 'Creating cover…' : story.coverImageUrl ? (story.productType === 'mini' ? 'Mini cover complete' : 'Regenerate cover') : 'Generate cover'}</button><button className="ghost" onClick={generateAllImages} disabled={generatingAll}>{generatingAll ? 'Illustrating pages…' : 'Generate all images'}</button><button className="primary-small" onClick={() => setStep('read')}>Open storybook →</button></div>
             </div>
             <div className="story-meta">
               <div><small>Starring</small><strong>{story.characterBible?.name}</strong></div>

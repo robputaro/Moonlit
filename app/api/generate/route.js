@@ -266,29 +266,42 @@ export async function POST(request) {
   let reserved = false;
   let generationId = '';
   let userId = '';
+  let isMiniStory = false;
   try {
     const auth = await authenticateRequest(request);
     if (auth.configured && !auth.user) {
       return NextResponse.json({ error: 'Please sign in to create stories.' }, { status: 401 });
     }
     const input = await request.json();
+    isMiniStory = input.productType === 'mini';
+    if (isMiniStory) input.length = '3';
     if (!input.childName) return NextResponse.json({ error: 'Please include a child name.' }, { status: 400 });
 
     if (auth.user) {
       userId = auth.user.id;
-      generationId = crypto.randomUUID();
+      generationId = input.generationId || crypto.randomUUID();
       const admin = getAdminClient();
-      const { error: reserveError } = await admin.rpc('reserve_story_credit', {
-        p_user_id: userId,
-        p_reference_id: generationId
-      });
-      if (reserveError) {
-        if (reserveError.message?.includes('NO_STORY_CREDITS')) {
-          return NextResponse.json({ error: 'You need a story credit to create this book. Join AMI Membership or wait for your next monthly credits.', code: 'NO_STORY_CREDITS' }, { status: 402 });
+      if (isMiniStory) {
+        const emailVerified = Boolean(auth.user.email_confirmed_at || auth.user.confirmed_at || auth.user.app_metadata?.provider === 'google');
+        if (!emailVerified) return NextResponse.json({ error: 'Confirm your email before creating your free AMI Mini Story.', code: 'EMAIL_NOT_VERIFIED' }, { status: 403 });
+        const { error: miniError } = await admin.rpc('reserve_free_mini_story', { p_user_id: userId, p_generation_id: generationId });
+        if (miniError) {
+          const message = miniError.message || '';
+          if (message.includes('MINI_STORY_ALREADY_USED')) return NextResponse.json({ error: 'This account has already used its free AMI Mini Story.', code: 'MINI_STORY_ALREADY_USED' }, { status: 409 });
+          if (message.includes('MINI_STORY_IN_PROGRESS')) return NextResponse.json({ error: 'A free Mini Story is already being created for this account.', code: 'MINI_STORY_IN_PROGRESS' }, { status: 409 });
+          throw miniError;
         }
-        throw reserveError;
+        reserved = true;
+      } else {
+        const { error: reserveError } = await admin.rpc('reserve_story_credit', { p_user_id: userId, p_reference_id: generationId });
+        if (reserveError) {
+          if (reserveError.message?.includes('NO_STORY_CREDITS')) {
+            return NextResponse.json({ error: 'You need a story credit to create this book. Join AMI Membership or wait for your next monthly credits.', code: 'NO_STORY_CREDITS' }, { status: 402 });
+          }
+          throw reserveError;
+        }
+        reserved = true;
       }
-      reserved = true;
     }
 
     const provider = (process.env.STORY_PROVIDER || '').toLowerCase();
@@ -300,18 +313,26 @@ export async function POST(request) {
     const story = result.story;
     story.language = input.language || 'en';
     story.dedication = cleanGeneratedText(input.dedication || '');
+    story.productType = isMiniStory ? 'mini' : 'full';
+    story.printEligible = !isMiniStory;
+    story.regenerationsAllowed = !isMiniStory;
+    if (isMiniStory && auth.user) {
+      const admin = getAdminClient();
+      const { error: completeMiniError } = await admin.rpc('complete_free_mini_story', { p_user_id: auth.user.id, p_generation_id: generationId });
+      if (completeMiniError) throw completeMiniError;
+    }
     if (auth.user) {
       await recordAiUsage({
         userId: auth.user.id,
         storyId: input.generationId || null,
-        operation: 'story_generation',
+        operation: isMiniStory ? 'mini_story_generation' : 'story_generation',
         provider: result.provider,
         model: result.model,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
         estimatedCostMicros: estimateTextCostMicros(result),
         providerRequestId: result.providerRequestId,
-        metadata: { page_count: Number(input.length) || 0, attempts: result.attempts || 1, language: input.language || 'en' }
+        metadata: { page_count: Number(input.length) || 0, attempts: result.attempts || 1, language: input.language || 'en', product_type: isMiniStory ? 'mini' : 'full' }
       });
     }
     return NextResponse.json({ ...cleanGeneratedStory(story), billing: { creditUsed: reserved, generationId } });
@@ -319,12 +340,13 @@ export async function POST(request) {
     if (reserved && userId && generationId) {
       try {
         const admin = getAdminClient();
-        await admin.rpc('refund_story_credit', { p_user_id: userId, p_reference_id: generationId });
+        if (isMiniStory) await admin.rpc('release_free_mini_story', { p_user_id: userId, p_generation_id: generationId });
+        else await admin.rpc('refund_story_credit', { p_user_id: userId, p_reference_id: generationId });
       } catch (refundError) {
         console.error('Story credit refund failed:', refundError);
       }
     }
-    if (userId) await recordAiUsage({ userId, storyId: generationId || null, operation: 'story_generation', provider: (process.env.STORY_PROVIDER || 'unknown'), model: process.env.ANTHROPIC_MODEL || process.env.OPENAI_MODEL || 'unknown', status: 'failed', errorCode: error?.message?.slice(0, 160), metadata: {} });
+    if (userId) await recordAiUsage({ userId, storyId: generationId || null, operation: isMiniStory ? 'mini_story_generation' : 'story_generation', provider: (process.env.STORY_PROVIDER || 'unknown'), model: process.env.ANTHROPIC_MODEL || process.env.OPENAI_MODEL || 'unknown', status: 'failed', errorCode: error?.message?.slice(0, 160), metadata: {} });
     console.error('Story route failed:', error);
     return NextResponse.json({ error: 'We could not finish that story this time. Your story credit was restored. Please try again.' }, { status: 500 });
   }

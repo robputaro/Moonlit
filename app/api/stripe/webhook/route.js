@@ -84,6 +84,12 @@ export async function POST(request) {
           p_cap: 4
         });
         if (grantError) throw grantError;
+        const { error: referralError } = await admin.rpc('reward_paid_referral', {
+          p_referred_user_id: userId,
+          p_invoice_id: object.id,
+          p_monthly_cap: 5
+        });
+        if (referralError) throw referralError;
       }
     }
 
