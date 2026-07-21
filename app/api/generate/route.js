@@ -36,6 +36,7 @@ function demoStory(input) {
       lockedWardrobe: wardrobe,
       visualAnchor: 'same face, hair, age, proportions, clothing, and color palette on every page'
     },
+    continuityBible: { worldDescription: 'A coherent whimsical garden and fern forest', colorPalette: 'warm gold, fern green, moonlit blue', recurringProps: [{ name: 'glowing dinosaur egg', description: 'plum-sized egg with tiny golden spots', color: 'warm cream and gold', scale: 'smaller than the child’s hand', rules: 'Never change size, markings, or material.' }], settingLogic: ['Plants and objects must behave naturally unless magic is explicitly described.'], forbiddenChanges: ['No unexplained wardrobe, prop color, species, or scale changes.'] },
     language: input.language || 'en',
     dedication: input.dedication || '',
     pages
@@ -136,8 +137,13 @@ Requirements:
 - Use the child's name naturally without overusing it.
 - Do not output HTML entities, HTML tags, or stray symbol sequences such as "&>" in any reader-visible text.
 - Return only valid JSON matching this structure:
-{"title":"","summary":"","takeaway":"","coverPrompt":"","characterBible":{"name":"","description":"","lockedWardrobe":"","visualAnchor":""},"pages":[{"pageNumber":1,"text":"","illustrationPrompt":""}]}
+{"title":"","summary":"","takeaway":"","coverPrompt":"","characterBible":{"name":"","description":"","lockedWardrobe":"","visualAnchor":""},"continuityBible":{"worldDescription":"","colorPalette":"","recurringProps":[{"name":"","description":"","color":"","scale":"","rules":""}],"settingLogic":[""],"forbiddenChanges":[""]},"pages":[{"pageNumber":1,"text":"","sceneLocation":"","continuityNotes":"","recurringProps":[""],"illustrationPrompt":""}]}
 - coverPrompt must describe one polished portrait cover scene without title text.
+- Build a continuityBible before planning pages. Identify every recurring object, vehicle, companion, outfit, and environment feature that must remain stable. Specify exact color, material, relative scale, and rules.
+- If an object is a toy, miniature, stuffed animal, or child-sized item, explicitly lock that scale and forbid depicting it as full-sized.
+- settingLogic must state simple real-world constraints relevant to the chosen environment (for example, palm trees do not grow pinecones; indoor objects do not appear outdoors without a story reason).
+- forbiddenChanges must list likely visual drift to prevent: color swaps, scale changes, wardrobe changes, species/object substitutions, and unexplained setting changes.
+- Each page must include sceneLocation, continuityNotes, and recurringProps. The illustrationPrompt must restate the exact locked appearance of any recurring prop shown on that page.
 - Treat the illustrations as a visual sequence, not a collection of character portraits.
 - Every illustrationPrompt must explicitly include: the setting, a visible action, the child's emotion through body language, meaningful props or companions, foreground detail, background detail, lighting, and a camera framing.
 - Use varied framing across the book: establishing wide shot, medium interaction, close emotional detail, low-angle wonder, overhead discovery, or over-the-shoulder view. Never use the same framing on adjacent pages.
@@ -171,9 +177,20 @@ function cleanGeneratedStory(story) {
       lockedWardrobe: cleanGeneratedText(story.characterBible.lockedWardrobe || ''),
       visualAnchor: cleanGeneratedText(story.characterBible.visualAnchor || '')
     } : story.characterBible,
+    continuityBible: story.continuityBible ? {
+      ...story.continuityBible,
+      worldDescription: cleanGeneratedText(story.continuityBible.worldDescription || ''),
+      colorPalette: cleanGeneratedText(story.continuityBible.colorPalette || ''),
+      recurringProps: Array.isArray(story.continuityBible.recurringProps) ? story.continuityBible.recurringProps.map((prop) => ({ ...prop, name: cleanGeneratedText(prop.name || ''), description: cleanGeneratedText(prop.description || ''), color: cleanGeneratedText(prop.color || ''), scale: cleanGeneratedText(prop.scale || ''), rules: cleanGeneratedText(prop.rules || '') })) : [],
+      settingLogic: Array.isArray(story.continuityBible.settingLogic) ? story.continuityBible.settingLogic.map(cleanGeneratedText) : [],
+      forbiddenChanges: Array.isArray(story.continuityBible.forbiddenChanges) ? story.continuityBible.forbiddenChanges.map(cleanGeneratedText) : []
+    } : story.continuityBible,
     pages: Array.isArray(story.pages) ? story.pages.map((page) => ({
       ...page,
       text: cleanGeneratedText(page.text || ''),
+      sceneLocation: cleanGeneratedText(page.sceneLocation || ''),
+      continuityNotes: cleanGeneratedText(page.continuityNotes || ''),
+      recurringProps: Array.isArray(page.recurringProps) ? page.recurringProps.map(cleanGeneratedText) : [],
       illustrationPrompt: cleanGeneratedText(page.illustrationPrompt || '')
     })) : story.pages
   };

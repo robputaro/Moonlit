@@ -9,6 +9,9 @@ function buildImagePrompt({ storyTitle, style, characterBible, page, kind }) {
   const character = characterBible?.description || 'a cheerful young child with a warm, expressive face';
   const wardrobe = characterBible?.lockedWardrobe || 'a simple, age-appropriate outfit that remains identical on every page';
   const visualAnchor = characterBible?.visualAnchor || 'same face, hair, age, proportions, outfit, and palette throughout the book';
+  const continuityBible = arguments[0]?.continuityBible || {};
+  const continuityText = JSON.stringify(continuityBible);
+  const priorScene = arguments[0]?.priorScene || '';
   const scene = kind === 'cover' ? page?.coverPrompt || page?.illustrationPrompt : page?.illustrationPrompt;
   const photoProfile = arguments[0]?.referencePhotoAnalysis ? `\nPHOTO-DERIVED PROFILE: ${JSON.stringify(arguments[0].referencePhotoAnalysis)}` : '';
   const pageNumber = Number(page?.pageNumber || 1);
@@ -33,6 +36,21 @@ ${character}
 Wardrobe that must remain consistent: ${wardrobe}
 Continuity anchor: ${visualAnchor}${photoProfile}
 
+LOCKED STORY CONTINUITY BIBLE:
+${continuityText || 'No extra continuity data supplied.'}
+
+PREVIOUS SCENE CONTEXT:
+${priorScene || 'This is the first scene.'}
+
+CURRENT SCENE LOCATION:
+${page?.sceneLocation || 'Use the location described in the scene.'}
+
+CURRENT PAGE CONTINUITY NOTES:
+${page?.continuityNotes || 'Preserve all locked details.'}
+
+RECURRING PROPS REQUIRED ON THIS PAGE:
+${Array.isArray(page?.recurringProps) ? page.recurringProps.join(', ') : 'none specified'}
+
 SCENE:
 ${scene}
 
@@ -46,6 +64,9 @@ Composition and safety requirements:
 - Avoid passport-photo framing, fashion poses, repeated neutral standing poses, and generic character showcase compositions.
 - Child-friendly, comforting, whimsical, and appropriate for young children.
 - Preserve the exact character description, face, hair, clothing, age, proportions, and palette.
+- Treat every recurring prop like a cast member: preserve its exact design, color, material, markings, and relative scale. A toy or miniature must never become a full-sized real object.
+- Obey the continuity bible and setting logic literally. Do not substitute a different vehicle, species, plant product, furniture item, or companion. Do not show pinecones growing on palm trees or any comparable real-world category error.
+- Compare the current scene to the previous scene and avoid unexplained changes. If a locked detail is absent from the current scene, do not redesign it when it returns later.
 - Portrait page dimensions with cinematic visual depth; vary character scale and placement rather than centering the child on every page.
 - ${kind === 'cover' ? 'Create a strong cover-worthy focal composition with room near the upper area, but do not render a title.' : 'Compose as a finished interior picture-book page.'}
 - No written words, letters, captions, logos, watermarks, frames, or speech bubbles.
@@ -69,22 +90,27 @@ export async function POST(request) {
     tracking = { userId: auth.user?.id || null, storyId: input.storyId || null, operation: input.operation || (input.kind === 'cover' ? 'cover_generation' : 'page_generation'), model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1' };
     const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
     const size = process.env.OPENAI_IMAGE_SIZE || '1024x1536';
-    const quality = process.env.OPENAI_IMAGE_QUALITY || 'medium';
+    const requestedQuality = String(input.quality || '').toLowerCase();
+    const quality = ['low', 'medium', 'high'].includes(requestedQuality) ? requestedQuality : (input.productType === 'mini' ? 'low' : (process.env.OPENAI_IMAGE_QUALITY || 'medium'));
     const scenePrompt = input?.kind === 'cover' ? input?.page?.coverPrompt || input?.page?.illustrationPrompt : input?.page?.illustrationPrompt;
     if (!scenePrompt) {
       return NextResponse.json({ error: 'This image is missing an illustration direction.' }, { status: 400 });
     }
 
     let response;
-    if (input.referencePhoto) {
+    const editSources = [];
+    if (input.referencePhoto) editSources.push({ url: input.referencePhoto, filename: 'child-reference.jpg', role: 'child likeness reference' });
+    if (input.anchorImage) editSources.push({ url: input.anchorImage, filename: 'visual-anchor.png', role: 'locked book visual anchor' });
+    if (editSources.length) {
       try {
-        const sourceResponse = await fetch(input.referencePhoto);
-        if (!sourceResponse.ok) throw new Error(`Reference photo could not be loaded (${sourceResponse.status}).`);
-        const photoBlob = await sourceResponse.blob();
         const body = new FormData();
         body.append('model', model);
-        body.append('prompt', `${buildImagePrompt(input)}\nUse the attached child photo only as a visual likeness reference. Preserve recognizable non-sensitive features while transforming the child into the selected illustrated storybook style. Do not reproduce the original background or create a photorealistic image.`);
-        body.append('image', photoBlob, 'child-reference.jpg');
+        body.append('prompt', `${buildImagePrompt(input)}\nUse the attached images only as continuity references. The child photo establishes likeness; the visual anchor establishes the exact illustrated character, wardrobe, palette, and recurring prop design. Create a new scene, not a copy of either reference.`);
+        for (const source of editSources) {
+          const sourceResponse = await fetch(source.url);
+          if (!sourceResponse.ok) throw new Error(`${source.role} could not be loaded (${sourceResponse.status}).`);
+          body.append('image', await sourceResponse.blob(), source.filename);
+        }
         body.append('size', size);
         body.append('quality', quality);
         body.append('input_fidelity', 'high');
@@ -93,9 +119,9 @@ export async function POST(request) {
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
           body
         });
-        if (!response.ok) console.warn('Reference image edit failed; falling back to profile-guided generation:', await response.clone().text());
+        if (!response.ok) console.warn('Continuity image edit failed; falling back to prompt-guided generation:', await response.clone().text());
       } catch (referenceError) {
-        console.warn('Reference image could not be used directly:', referenceError);
+        console.warn('Continuity references could not be used directly:', referenceError);
       }
     }
 
@@ -132,10 +158,10 @@ export async function POST(request) {
       storyId: input.storyId || null,
       operation: input.operation || (input.kind === 'cover' ? 'cover_generation' : 'page_generation'),
       provider: 'openai', model, imageCount: 1, quality, size,
-      referenceImage: Boolean(input.referencePhoto),
-      estimatedCostMicros: estimateImageCostMicros({ quality, size, referenceImage: Boolean(input.referencePhoto) }),
+      referenceImage: Boolean(input.referencePhoto || input.anchorImage),
+      estimatedCostMicros: estimateImageCostMicros({ quality, size, referenceImage: Boolean(input.referencePhoto || input.anchorImage) }),
       providerRequestId: data?.id || image?.id || null,
-      metadata: { page_number: input.page?.pageNumber || null, kind: input.kind || 'page' }
+      metadata: { page_number: input.page?.pageNumber || null, kind: input.kind || 'page', quality, used_anchor: Boolean(input.anchorImage), product_type: input.productType || 'full' }
     });
     return NextResponse.json({ imageUrl });
   } catch (error) {

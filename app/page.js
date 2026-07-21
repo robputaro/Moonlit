@@ -141,6 +141,11 @@ function decodeStoryEntities(story) {
       name: decodeHtmlEntities(story.characterBible.name || ''),
       description: decodeHtmlEntities(story.characterBible.description || '')
     } : story.characterBible,
+    continuityBible: story.continuityBible ? {
+      ...story.continuityBible,
+      worldDescription: decodeHtmlEntities(story.continuityBible.worldDescription || ''),
+      colorPalette: decodeHtmlEntities(story.continuityBible.colorPalette || '')
+    } : story.continuityBible,
     pages: Array.isArray(story.pages) ? story.pages.map((page) => ({
       ...page,
       text: decodeHtmlEntities(page.text || ''),
@@ -754,6 +759,112 @@ export default function Home() {
     setReferencePhotoAnalysis(null);
   }
 
+  function illustrationQualityFor(productType) {
+    return productType === 'mini' ? 'low' : 'medium';
+  }
+
+  async function requestStoryIllustration({ activeStory, activeStoryId, kind = 'page', page, anchorImage = '', priorScene = '', operation }) {
+    const response = await authenticatedFetch('/api/illustrate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind,
+        storyTitle: activeStory.title,
+        style: form.style,
+        characterBible: activeStory.characterBible,
+        continuityBible: activeStory.continuityBible || {},
+        referencePhoto: activeStory.referencePhotoUrl || referencePhoto || '',
+        referencePhotoAnalysis: activeStory.referencePhotoAnalysis || referencePhotoAnalysis,
+        anchorImage,
+        priorScene,
+        page,
+        storyId: activeStoryId,
+        productType: activeStory.productType || 'full',
+        quality: illustrationQualityFor(activeStory.productType),
+        operation: operation || (kind === 'cover' ? 'cover_generation' : 'page_generation')
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Image generation failed.');
+    return data.imageUrl;
+  }
+
+  async function illustrateStoryOneClick(activeStory, activeStoryId) {
+    if (!activeStory?.pages?.length) return activeStory;
+    setStep('review');
+    setGeneratingAll(true);
+    setEngagementCardIndex(0);
+    setGenerationAllProgress({ current: 0, total: activeStory.pages.length + 1 });
+    setLoadingMessage('Creating the visual anchor…');
+    setError('');
+    let workingStory = { ...activeStory, generationStatus: 'illustrating' };
+    try {
+      if (workingStory.engagementPack?.length) setEngagementCards(workingStory.engagementPack);
+      else generateEngagementPack(workingStory, activeStoryId).catch(() => {});
+
+      if (!workingStory.coverImageUrl) {
+        const coverImageUrl = await requestStoryIllustration({
+          activeStory: workingStory,
+          activeStoryId,
+          kind: 'cover',
+          page: { coverPrompt: workingStory.coverPrompt || workingStory.pages?.[0]?.illustrationPrompt },
+          operation: 'cover_anchor_generation'
+        });
+        workingStory = { ...workingStory, coverImageUrl };
+        setStory(workingStory);
+        setGenerationAllProgress({ current: 1, total: workingStory.pages.length + 1 });
+        await autosaveStorySnapshot(workingStory, { id: activeStoryId, status: 'illustrating', silent: true });
+      }
+
+      const anchorImage = workingStory.coverImageUrl || '';
+      const remaining = workingStory.pages.map((page, index) => ({ page, index })).filter(({ page }) => !page.imageUrl);
+      const batchSize = workingStory.productType === 'mini' ? 2 : 3;
+      let completed = workingStory.pages.filter((page) => page.imageUrl).length;
+
+      for (let start = 0; start < remaining.length; start += batchSize) {
+        const batch = remaining.slice(start, start + batchSize);
+        setLoadingMessage(`Painting pages ${completed + 1}–${Math.min(completed + batch.length, workingStory.pages.length)}…`);
+        const results = await Promise.all(batch.map(async ({ page, index }) => ({
+          index,
+          imageUrl: await requestStoryIllustration({
+            activeStory: workingStory,
+            activeStoryId,
+            page,
+            anchorImage,
+            priorScene: index > 0 ? workingStory.pages[index - 1]?.illustrationPrompt || '' : '',
+            operation: 'page_generation'
+          })
+        })));
+        const pageMap = new Map(results.map((result) => [result.index, result.imageUrl]));
+        workingStory = {
+          ...workingStory,
+          pages: workingStory.pages.map((page, index) => pageMap.has(index) ? { ...page, imageUrl: pageMap.get(index) } : page)
+        };
+        completed += results.length;
+        setStory(workingStory);
+        setGenerationAllProgress({ current: completed + 1, total: workingStory.pages.length + 1 });
+        await autosaveStorySnapshot(workingStory, { id: activeStoryId, status: 'illustrating', silent: true });
+      }
+
+      workingStory = { ...workingStory, generationStatus: 'complete' };
+      setStory(workingStory);
+      await autosaveStorySnapshot(workingStory, { id: activeStoryId, status: 'complete', message: 'Book saved automatically' });
+      await refreshLibrary();
+      if (workingStory.productType === 'mini') {
+        window.setTimeout(() => document.getElementById('ami-mini-complete')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
+      }
+      return workingStory;
+    } catch (pipelineError) {
+      setStory(workingStory);
+      await autosaveStorySnapshot(workingStory, { id: activeStoryId, status: 'illustrating', silent: true }).catch(() => {});
+      throw pipelineError;
+    } finally {
+      setGeneratingAll(false);
+      setGenerationAllProgress({ current: 0, total: 0 });
+      setLoadingMessage('');
+    }
+  }
+
   async function generateStory(event) {
     event.preventDefault();
     if (supabaseConfigured && !user) {
@@ -820,13 +931,13 @@ export default function Home() {
         generationStatus: 'manuscript_ready'
       });
       setStory(generatedStory);
-      await autosaveStorySnapshot(generatedStory, { id: persistentStoryId, status: 'manuscript_ready', message: 'Story saved automatically' });
+      await autosaveStorySnapshot(generatedStory, { id: persistentStoryId, status: 'manuscript_ready', message: 'Story written and saved' });
       setEngagementAnswers({});
       setSurpriseMessage('');
       setEngagementCards(fallbackEngagementCards);
-      generateEngagementPack(generatedStory, persistentStoryId).catch(() => {});
-      setStep('review');
       setPageIndex(0);
+      const completedStory = await illustrateStoryOneClick(generatedStory, persistentStoryId);
+      setStory(completedStory);
       refreshReferralStatus();
       window.localStorage.removeItem(AMI_DRAFT_KEY);
       setDraftMessage('');
@@ -871,6 +982,11 @@ export default function Home() {
           storyTitle: story.title,
           style: form.style,
           characterBible: story.characterBible,
+          continuityBible: story.continuityBible || {},
+          anchorImage: story.coverImageUrl || '',
+          priorScene: index > 0 ? story.pages[index - 1]?.illustrationPrompt || '' : '',
+          productType: story.productType || 'full',
+          quality: illustrationQualityFor(story.productType),
           referencePhoto: story.referencePhotoUrl || referencePhoto || '',
           referencePhotoAnalysis: story.referencePhotoAnalysis || referencePhotoAnalysis,
           page,
@@ -913,6 +1029,9 @@ export default function Home() {
           storyTitle: story.title,
           style: form.style,
           characterBible: story.characterBible,
+          continuityBible: story.continuityBible || {},
+          productType: story.productType || 'full',
+          quality: illustrationQualityFor(story.productType),
           referencePhoto: story.referencePhotoUrl || referencePhoto || '',
           referencePhotoAnalysis: story.referencePhotoAnalysis || referencePhotoAnalysis,
           page: { coverPrompt: story.coverPrompt || story.pages?.[0]?.illustrationPrompt },
@@ -1040,28 +1159,10 @@ export default function Home() {
 
   async function generateAllImages() {
     if (!story?.pages?.length || generatingAll) return;
-    const remaining = story.pages.map((page, index) => ({ page, index })).filter(({ page }) => !page.imageUrl);
-    setGeneratingAll(true);
-    setEngagementCardIndex(0);
-    if (story.engagementPack?.length) setEngagementCards(story.engagementPack);
-    else generateEngagementPack(story, storyId).catch(() => {});
-    setGenerationAllProgress({ current: 0, total: remaining.length });
-    setError('');
     try {
-      for (let position = 0; position < remaining.length; position += 1) {
-        setGenerationAllProgress({ current: position + 1, total: remaining.length });
-        await generateImageForPage(remaining[position].index);
-      }
-      const completedStory = { ...story, generationStatus: 'complete' };
-      setStory((current) => ({ ...current, generationStatus: 'complete' }));
-      await autosaveStorySnapshot(completedStory, { id: storyId, status: 'complete', message: 'Book saved automatically' });
-      await refreshLibrary();
-      if (completedStory.productType === 'mini') {
-        setTimeout(() => document.getElementById('ami-mini-complete')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
-      }
-    } finally {
-      setGeneratingAll(false);
-      setGenerationAllProgress({ current: 0, total: 0 });
+      await illustrateStoryOneClick(story, storyId);
+    } catch (err) {
+      setError(err.message || 'AMI could not finish every illustration. Your completed pages are safely saved, and you can continue from here.');
     }
   }
 
@@ -1939,11 +2040,11 @@ export default function Home() {
               ) : (
                 <div className="field-grid two bottom-fields">
                   <label>Book length<select value={form.length} onChange={(e) => update('length', e.target.value)}><option value="5">Quick story · 5 pages</option><option value="10">Bedtime story · 10 pages</option><option value="16">Full storybook · 16 pages</option></select></label>
-                  <div className="generation-note">Your story will be generated as an editable draft before any illustrations are created.</div>
+                  <div className="generation-note">One click writes, plans, illustrates, and saves the complete book. You can still review and edit every page afterward.</div>
                 </div>
               )}
               {draftMessage && <div className="draft-restored"><strong>Welcome back.</strong><span>{draftMessage}</span><button type="button" onClick={() => { window.localStorage.removeItem(AMI_DRAFT_KEY); setForm(emptyForm); setReferencePhoto(''); setReferencePhotoAnalysis(null); setDraftMessage(''); }}>Start fresh</button></div>}
-              {loading && <div className="ami-generation-stage" role="status" aria-live="polite"><div className="ami-generation-orbit"><span>✦</span></div><div><strong>{loadingMessage || 'Writing your story…'}</strong><p>AMI is shaping the story, planning distinct scenes, and preparing an editable draft. Keep this tab open for a moment.</p><div className="ami-generation-steps"><span className="done">Story details</span><span className={loadingMessage?.includes('page') || loadingMessage?.includes('ready') ? 'done' : ''}>Story arc</span><span className={loadingMessage?.includes('ready') ? 'done' : ''}>Page plan</span></div></div></div>}
+              {loading && <div className="ami-generation-stage" role="status" aria-live="polite"><div className="ami-generation-orbit"><span>✦</span></div><div><strong>{loadingMessage || 'Writing your story…'}</strong><p>AMI is writing the story, locking the characters and recurring objects, then illustrating every page. Keep this tab open while the book comes together.</p><div className="ami-generation-steps"><span className="done">Story details</span><span className={loadingMessage?.includes('page') || loadingMessage?.includes('ready') ? 'done' : ''}>Story arc</span><span className={loadingMessage?.includes('ready') ? 'done' : ''}>Page plan</span></div></div></div>}
               {error && <div className="error">{error}</div>}
               <button className="primary-button" disabled={loading || (form.productType === 'mini' && user && referralStatus && !referralStatus.miniAvailable)}>{loading ? loadingMessage || 'Writing your story…' : form.productType === 'mini' ? 'Create my free Mini Story' : form.storyMode === 'Challenge' ? 'Create their challenge story' : 'Create my story'}<span>→</span></button>
               <p className="privacy-note">Use a first name or nickname. AMI does not need private information about your child.</p>
@@ -1969,13 +2070,13 @@ export default function Home() {
               <div><small>Gentle takeaway</small><strong>{decodeHtmlEntities(story.takeaway)}</strong></div>
             </div>
             {error && <div className="error review-error">{error}</div>}
-            <div className="image-note"><strong>Illustrations are created after the writing.</strong> Review the story first, then create one page at a time or illustrate the full book.</div>
+            <div className="image-note"><strong>Your complete book was created in one pass.</strong> Review and edit the writing or regenerate an individual page only when something needs attention.</div>
             {generatingAll && (() => {
               const card = engagementCards[engagementCardIndex % engagementCards.length];
               const completed = story.pages.filter((page) => page.imageUrl).length;
               return <div className="ami-assembly-overlay" role="status" aria-live="polite"><div className="ami-assembly-workspace">
                 <div className="ami-assembly-heading">
-                  <div><span>YOUR BOOK IS COMING TOGETHER</span><strong>Painting page {generationAllProgress.current} of {generationAllProgress.total}</strong><p>{story.characterBible?.name || form.childName || 'Your child'}’s story is written. AMI is now building each illustrated moment and saving every finished page to the shelf.</p></div>
+                  <div><span>YOUR BOOK IS COMING TOGETHER</span><strong>{generationAllProgress.current <= 1 ? 'Creating the visual anchor' : `Painting page ${Math.max(1, generationAllProgress.current - 1)} of ${story.pages.length}`}</strong><p>{story.characterBible?.name || form.childName || 'Your child'}’s story is written. AMI is now building each illustrated moment and saving every finished page to the shelf.</p></div>
                   <b>{generationAllProgress.total ? Math.round((generationAllProgress.current / generationAllProgress.total) * 100) : 0}%</b>
                 </div>
                 <div className="illustration-progress-track"><i style={{ width: `${generationAllProgress.total ? Math.round((generationAllProgress.current / generationAllProgress.total) * 100) : 0}%` }} /></div>
