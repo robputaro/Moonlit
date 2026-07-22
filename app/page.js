@@ -252,6 +252,7 @@ const emptyForm = {
 };
 
 export default function Home() {
+  const adventureBooksEnabled = process.env.NEXT_PUBLIC_AMI_ADVENTURE_BOOKS_ENABLED === 'true';
   const [form, setForm] = useState(emptyForm);
   const [step, setStep] = useState('create');
   const [story, setStory] = useState(null);
@@ -1911,7 +1912,7 @@ export default function Home() {
         <a className="brand ami-logo-link" href="#" onClick={(e) => {e.preventDefault(); setStep('create')}} aria-label="AMI home">
           <img className="ami-header-logo" src="/ami-logo.svg" alt="AMI" />
         </a>
-        <div className="header-actions-global"><a className="header-platform-link" href="/membership">Membership</a>{user && <a className="header-credit-chip" href="/membership" title="Story credits">{billingStatus?.isAdmin ? 'Unlimited stories' : `${billingStatus?.credits ?? '…'} credits`}</a>}{isAdmin && <a className="header-platform-link studio-link" href="/studio">Studio</a>}<button type="button" className="theme-toggle-button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'} title={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Bedtime'}</span></button><button type="button" onClick={openLibrary}>My stories</button>{supabaseConfigured ? (user ? <div className="account-chip"><span>{user.email}</span><button type="button" onClick={signOut}>Sign out</button></div> : <button type="button" className="sign-in-button" onClick={() => requestSignIn()}>Sign in</button>) : <div className="header-note">Local preview mode</div>}</div>
+        <div className="header-actions-global">{adventureBooksEnabled && <a className="header-platform-link adventure-header-link" href="/adventure-book">Free Adventure Book</a>}<a className="header-platform-link" href="/membership">Membership</a>{user && <a className="header-credit-chip" href="/membership" title="Story credits">{billingStatus?.isAdmin ? 'Unlimited stories' : `${billingStatus?.credits ?? '…'} credits`}</a>}{isAdmin && <a className="header-platform-link studio-link" href="/studio">Studio</a>}<button type="button" className="theme-toggle-button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'} title={theme === 'dark' ? 'Use light mode' : 'Use bedtime mode'}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Bedtime'}</span></button><button type="button" onClick={openLibrary}>My stories</button>{supabaseConfigured ? (user ? <div className="account-chip"><span>{user.email}</span><button type="button" onClick={signOut}>Sign out</button></div> : <button type="button" className="sign-in-button" onClick={() => requestSignIn()}>Sign in</button>) : <div className="header-note">Local preview mode</div>}</div>
       </header>
 
       <section className="shell">
