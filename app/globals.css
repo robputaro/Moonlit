@@ -1352,6 +1352,7 @@ html[data-theme="dark"] .ami-header-logo{
   gap: 16px !important;
 }
 .style-choice {
+  position: relative;
   padding: 10px 10px 14px !important;
   border-radius: 18px !important;
   overflow: hidden;
@@ -1361,6 +1362,25 @@ html[data-theme="dark"] .ami-header-logo{
 .style-choice.selected {
   border-color: var(--ml-accent, #6d5bb7) !important;
   box-shadow: 0 0 0 3px rgba(109,91,183,.16), 0 18px 40px rgba(52,43,90,.12) !important;
+}
+.style-selected-check {
+  position: absolute;
+  z-index: 2;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255,255,255,.92);
+  border-radius: 999px;
+  background: var(--ml-primary, #6d5bb7);
+  color: #fff !important;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 5px 14px rgba(45,35,82,.28);
+  pointer-events: none;
 }
 .style-preview {
   height: auto !important;

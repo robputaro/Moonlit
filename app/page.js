@@ -2020,6 +2020,7 @@ export default function Home() {
                   const selected = normalizeAmiStyle(form.style) === style.id;
                   return (
                     <button type="button" key={style.id} className={`style-choice ${selected ? 'selected' : ''}`} onClick={() => update('style', style.id)} aria-pressed={selected}>
+                      {selected && <span className="style-selected-check" aria-hidden="true">✓</span>}
                       <div className="style-preview"><img src={style.preview} alt={`${style.id} storybook style sample`} loading="lazy" /></div>
                       <div className="style-choice-copy"><strong>{style.id}</strong><span>{style.bestFor}</span></div>
                       <small>{style.description}</small>
