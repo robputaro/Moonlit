@@ -1916,6 +1916,19 @@ export default function Home() {
       </header>
 
       <section className="shell">
+        {adventureBooksEnabled && <section className="ami-adventure-home-spotlight" aria-label="Free AMI Adventure Book">
+          <div className="ami-adventure-home-copy">
+            <span>FREE PERSONALIZED PRINTABLE</span>
+            <h2>Create their first AMI Adventure Book.</h2>
+            <p>Twenty age-appropriate pages of coloring, puzzles, tracing, drawing, and creative play—personalized with your child’s name and favorite world.</p>
+            <div className="ami-adventure-home-details"><small>Free digital PDF</small><small>Ages 2–10</small><small>No story credit needed</small></div>
+          </div>
+          <div className="ami-adventure-home-action">
+            <div className="ami-adventure-mini-cover" aria-hidden="true"><i>AMI ADVENTURE BOOK</i><b>✦</b><strong>Made for them</strong><small>20 PAGES</small></div>
+            <a href="/adventure-book">Create their free book <span>→</span></a>
+            <small>Or continue below to create a personalized Storybook.</small>
+          </div>
+        </section>}
         {user && localImportCount > 0 && <div className="import-banner"><div><strong>Bring your earlier stories with you.</strong><span>AMI found {localImportCount} {localImportCount === 1 ? 'story' : 'stories'} saved in this browser.</span></div><button type="button" onClick={importLocalStories} disabled={importingStories}>{importingStories ? 'Importing…' : 'Add to my account'}</button></div>}
         {step !== 'library' && <div className="progress-row" aria-label="Progress">
           {['Create', 'Review', 'Read'].map((label, index) => (
