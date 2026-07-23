@@ -5,8 +5,6 @@ import { getAdminClient } from '../../../lib/billing-server';
 import { estimateTextCostMicros, recordAiUsage } from '../../../lib/ai-tracking';
 import { getAmiStylePlanningNotes, getAmiStylePrompt, normalizeAmiStyle } from '../../../lib/ami-styles';
 
-export const maxDuration = 300;
-
 function demoStory(input) {
   const name = input.childName || 'August';
   const count = Math.max(5, Math.min(16, Number(input.length) || 10));
@@ -201,7 +199,6 @@ Requirements:
 - settingLogic must state simple real-world constraints relevant to the chosen environment (for example, palm trees do not grow pinecones; indoor objects do not appear outdoors without a story reason).
 - forbiddenChanges must list likely visual drift to prevent: color swaps, scale changes, wardrobe changes, species or object substitutions, and unexplained setting changes.
 - Each page must include sceneLocation, continuityNotes, recurringProps, and scenePlan. The illustrationPrompt must restate the exact locked appearance of any recurring prop shown on that page.
-- Keep planning metadata concise: sceneLocation, continuityNotes, and each scenePlan value should usually be 3–15 words. Keep each illustrationPrompt between 45 and 90 words.
 - Treat the illustrations as a visual sequence, not a collection of character portraits.
 - Every scenePlan must define: action, framing, lighting, mood, foregroundDetail, backgroundDetail, and environmentBeat.
 - Every illustrationPrompt must explicitly include: the setting, a visible action, the child's emotion through body language, meaningful props or companions, foreground detail, background detail, lighting, and a camera framing.
@@ -209,8 +206,7 @@ Requirements:
 - No more than one page in the entire book may be a simple portrait. Do not place the child standing alone against a plain, blank, studio, gradient, or empty background unless the story absolutely requires it.
 - Each page must visually advance that exact story beat through action or interaction. Avoid repeated poses, repeated rooms, repeated centered compositions, and generic smiling-at-camera scenes.
 - Ensure the first, middle, turning-point, and final scenes feel visually distinct in location, scale, mood, and composition.
-- The characterBible and selected style are injected into every image request later, so do not waste output space repeating the full child description or full style paragraph inside every illustrationPrompt.
-- Every illustrationPrompt must end with: "consistent character design, no text in image."`;
+- Every illustrationPrompt must repeat the child's stable appearance and wardrobe, maintain the selected visual style, and end with: "consistent character design, no text in image."`;
 }
 
 function cleanGeneratedText(value) {
@@ -312,108 +308,15 @@ function validateStory(story, expectedPages) {
   return story;
 }
 
-const shortString = { type: 'string' };
-const stringArray = { type: 'array', items: { type: 'string' } };
-const recurringPropSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['name', 'description', 'color', 'scale', 'rules'],
-  properties: {
-    name: shortString,
-    description: shortString,
-    color: shortString,
-    scale: shortString,
-    rules: shortString
-  }
-};
-const scenePlanSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['action', 'framing', 'lighting', 'mood', 'foregroundDetail', 'backgroundDetail', 'environmentBeat'],
-  properties: {
-    action: shortString,
-    framing: shortString,
-    lighting: shortString,
-    mood: shortString,
-    foregroundDetail: shortString,
-    backgroundDetail: shortString,
-    environmentBeat: shortString
-  }
-};
-const pageSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['pageNumber', 'text', 'sceneLocation', 'continuityNotes', 'recurringProps', 'scenePlan', 'illustrationPrompt'],
-  properties: {
-    pageNumber: { type: 'integer' },
-    text: shortString,
-    sceneLocation: shortString,
-    continuityNotes: shortString,
-    recurringProps: stringArray,
-    scenePlan: scenePlanSchema,
-    illustrationPrompt: shortString
-  }
-};
-const STORY_RESPONSE_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['title', 'summary', 'takeaway', 'coverPrompt', 'characterBible', 'continuityBible', 'pages'],
-  properties: {
-    title: shortString,
-    summary: shortString,
-    takeaway: shortString,
-    coverPrompt: shortString,
-    characterBible: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['name', 'description', 'lockedWardrobe', 'visualAnchor'],
-      properties: {
-        name: shortString,
-        description: shortString,
-        lockedWardrobe: shortString,
-        visualAnchor: shortString
-      }
-    },
-    continuityBible: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['worldDescription', 'colorPalette', 'recurringProps', 'settingLogic', 'forbiddenChanges'],
-      properties: {
-        worldDescription: shortString,
-        colorPalette: shortString,
-        recurringProps: { type: 'array', items: recurringPropSchema },
-        settingLogic: stringArray,
-        forbiddenChanges: stringArray
-      }
-    },
-    pages: { type: 'array', items: pageSchema }
-  }
-};
-
 async function openAIStory(input) {
   const model = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-    body: JSON.stringify({
-      model,
-      input: buildPrompt(input),
-      max_output_tokens: 12000,
-      text: {
-        format: {
-          type: 'json_schema',
-          name: 'ami_story',
-          strict: true,
-          schema: STORY_RESPONSE_SCHEMA
-        }
-      }
-    })
+    body: JSON.stringify({ model, input: buildPrompt(input), text: { format: { type: 'json_object' } } })
   });
   if (!response.ok) throw new Error(`OpenAI error: ${await response.text()}`);
   const data = await response.json();
-  if (data.status === 'incomplete') {
-    throw new Error(`OpenAI returned an incomplete story response: ${data.incomplete_details?.reason || 'output limit reached'}`);
-  }
   const text = data.output_text || data.output?.flatMap(item => item.content || []).find(item => item.type === 'output_text')?.text;
   return {
     story: extractJson(text),
@@ -433,27 +336,13 @@ async function claudeStory(input) {
       'x-api-key': process.env.ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01'
     },
-    body: JSON.stringify({
-      model,
-      max_tokens: 12000,
-      tools: [{
-        name: 'submit_ami_story',
-        description: 'Submit the complete AMI manuscript and visual plan in validated structured fields.',
-        input_schema: STORY_RESPONSE_SCHEMA
-      }],
-      tool_choice: { type: 'tool', name: 'submit_ami_story' },
-      messages: [{ role: 'user', content: buildPrompt(input) }]
-    })
+    body: JSON.stringify({ model, max_tokens: 6500, messages: [{ role: 'user', content: buildPrompt(input) }] })
   });
   if (!response.ok) throw new Error(`Anthropic error: ${await response.text()}`);
   const data = await response.json();
-  if (data.stop_reason === 'max_tokens') {
-    throw new Error('Anthropic reached the story output limit before completing every page.');
-  }
-  const toolResult = data.content?.find(block => block.type === 'tool_use' && block.name === 'submit_ami_story')?.input;
-  if (!toolResult) throw new Error('Anthropic did not return the required structured AMI story.');
+  const text = data.content?.find(block => block.type === 'text')?.text || '';
   return {
-    story: toolResult,
+    story: extractJson(text),
     provider: 'anthropic', model,
     inputTokens: data.usage?.input_tokens || 0,
     outputTokens: data.usage?.output_tokens || 0,
