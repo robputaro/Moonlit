@@ -166,7 +166,6 @@ Appearance notes from family: ${input.appearance || 'not specified'}
 Photo-derived visual profile: ${input.referencePhotoAnalysis ? JSON.stringify(input.referencePhotoAnalysis) : 'no reference photo supplied'}
 When a photo-derived profile is supplied, use it as the primary visual reference while keeping the result stylized, child-friendly, and non-photorealistic. Do not infer sensitive traits or identity.
 Preserve the child's recognizable supplied traits without exaggerating the eyes, mouth, teeth, cheeks, head size, or body proportions.
-The characterBible must describe this specific child faithfully. Do not make style-driven changes to age, hair, glasses, face shape, or gender presentation. Never invent glasses or other defining traits. Never convert the child into a generic wide-eyed mascot.
 Book language: ${input.language || 'en'}
 ${languageInstruction(input.language)}
 Dedication supplied by the family: ${input.dedication || 'none'}

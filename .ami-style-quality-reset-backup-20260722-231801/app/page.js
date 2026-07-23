@@ -788,6 +788,7 @@ export default function Home() {
 
   function illustrationQualityFor(productType, style, kind) {
     if (productType === 'mini') return 'low';
+    if (normalizeAmiStyle(style) === 'Personalized 2D Storybook') return kind === 'cover' ? 'medium' : 'low';
     return 'medium';
   }
 
@@ -798,19 +799,17 @@ export default function Home() {
       body: JSON.stringify({
         kind,
         storyTitle: activeStory.title,
-        style: activeStory.style || form.style,
+        style: form.style,
         characterBible: activeStory.characterBible,
         continuityBible: activeStory.continuityBible || {},
-        referencePhoto: activeStory.referencePhotoUrl || referencePhoto || '',
+        referencePhoto: anchorImage ? '' : (activeStory.referencePhotoUrl || referencePhoto || ''),
         referencePhotoAnalysis: activeStory.referencePhotoAnalysis || referencePhotoAnalysis,
         anchorImage,
-        childAge: activeStory.childAge || form.age,
-        childPronouns: activeStory.childPronouns || form.pronouns,
         priorScene,
         page,
         storyId: activeStoryId,
         productType: activeStory.productType || 'full',
-        quality: illustrationQualityFor(activeStory.productType, activeStory.style || form.style, kind),
+        quality: illustrationQualityFor(activeStory.productType, form.style, kind),
         operation: operation || (kind === 'cover' ? 'cover_generation' : 'page_generation')
       })
     });
@@ -951,9 +950,6 @@ export default function Home() {
         dedication: generationInput.dedication || '',
         referencePhotoUrl: referencePhoto || '',
         referencePhotoAnalysis: activePhotoAnalysis,
-        childAge: generationInput.age,
-        childPronouns: generationInput.pronouns,
-        style: normalizeAmiStyle(generationInput.style),
         createdAt: new Date().toISOString(),
         generationStatus: 'writing',
         productType: generationInput.productType === 'mini' ? 'mini' : 'full',
@@ -977,9 +973,6 @@ export default function Home() {
         dedication: generationInput.dedication || '',
         referencePhotoUrl: referencePhoto || '',
         referencePhotoAnalysis: activePhotoAnalysis,
-        childAge: generationInput.age,
-        childPronouns: generationInput.pronouns,
-        style: normalizeAmiStyle(generationInput.style),
         createdAt: startingStory.createdAt,
         generationId: data.billing?.generationId || persistentStoryId,
         generationStatus: 'manuscript_ready'
@@ -1034,7 +1027,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           storyTitle: story.title,
-          style: story.style || form.style,
+          style: form.style,
           characterBible: story.characterBible,
           continuityBible: story.continuityBible || {},
           anchorImage: story.coverImageUrl || '',
@@ -1043,8 +1036,6 @@ export default function Home() {
           quality: illustrationQualityFor(story.productType),
           referencePhoto: story.referencePhotoUrl || referencePhoto || '',
           referencePhotoAnalysis: story.referencePhotoAnalysis || referencePhotoAnalysis,
-          childAge: story.childAge || form.age,
-          childPronouns: story.childPronouns || form.pronouns,
           page,
           storyId,
           operation: page.imageUrl ? 'page_regeneration' : 'page_generation'
@@ -1083,15 +1074,13 @@ export default function Home() {
         body: JSON.stringify({
           kind: 'cover',
           storyTitle: story.title,
-          style: story.style || form.style,
+          style: form.style,
           characterBible: story.characterBible,
           continuityBible: story.continuityBible || {},
           productType: story.productType || 'full',
           quality: illustrationQualityFor(story.productType),
           referencePhoto: story.referencePhotoUrl || referencePhoto || '',
           referencePhotoAnalysis: story.referencePhotoAnalysis || referencePhotoAnalysis,
-          childAge: story.childAge || form.age,
-          childPronouns: story.childPronouns || form.pronouns,
           page: { coverPrompt: story.coverPrompt || story.pages?.[0]?.illustrationPrompt },
           storyId,
           operation: story.coverImageUrl ? 'cover_regeneration' : 'cover_generation'

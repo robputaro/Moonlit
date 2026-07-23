@@ -6,7 +6,7 @@ import { getAmiStylePlanningNotes, getAmiStylePrompt, normalizeAmiStyle } from '
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-function buildImagePrompt({ storyTitle, style, characterBible, continuityBible = {}, page, kind, referencePhotoAnalysis, priorScene = '', childAge = '', childPronouns = '' }) {
+function buildImagePrompt({ storyTitle, style, characterBible, continuityBible = {}, page, kind, referencePhotoAnalysis, priorScene = '' }) {
   const character = characterBible?.description || 'a cheerful young child with a warm, expressive face';
   const wardrobe = characterBible?.lockedWardrobe || 'a simple, age-appropriate outfit that remains identical on every page';
   const visualAnchor = characterBible?.visualAnchor || 'same face, hair, age, proportions, outfit, and palette throughout the book';
@@ -27,6 +27,7 @@ function buildImagePrompt({ storyTitle, style, characterBible, continuityBible =
     'high or overhead view that clearly shows movement through the setting'
   ];
   const preferredFraming = scenePlan.framing || framingSequence[(Math.max(1, pageNumber) - 1) % framingSequence.length];
+  const isPersonalized2D = styleId === 'Personalized 2D Storybook';
 
   return `Create one polished portrait illustration for a children's picture book.
 
@@ -38,13 +39,8 @@ STYLE ENFORCEMENT: ${stylePlanning}
 
 LOCKED MAIN CHARACTER:
 ${character}
-Known age: ${childAge || 'Use the exact apparent age in the supplied photo and character description.'}
-Language/pronoun guidance: ${childPronouns || 'Follow the supplied character description; do not invent gender-coded features.'}
 Wardrobe that must remain consistent: ${wardrobe}
 Continuity anchor: ${visualAnchor}${photoProfile}
-
-NON-NEGOTIABLE LIKENESS PRIORITY:
-The attached child photo is the source of truth for identity and age. The illustrated anchor is secondary and controls wardrobe, palette, and continuity only. If the anchor conflicts with the photo, follow the photo. Preserve the child as this specific child rather than inventing a generic storybook mascot.
 
 LOCKED STORY CONTINUITY BIBLE:
 ${continuityText || 'No extra continuity data supplied.'}
@@ -83,10 +79,7 @@ Composition and safety requirements:
 - Avoid passport-photo framing, fashion poses, repeated neutral standing poses, and generic character showcase compositions.
 - Child-friendly, comforting, whimsical, and appropriate for young children.
 - Preserve the exact character description, face, hair, clothing, age, proportions, and palette.
-- Facial likeness outranks art style. Translate the supplied child into the selected medium without redesigning their face.
 - Preserve a stable facial identity: face shape, hairline and curl pattern, eye color, skin tone, nose shape, glasses, freckles, and other supplied traits must not drift between pages.
-- Do not add glasses, bangs, long hair, short hair, freckles, dimples, teeth, or other defining features unless they appear in the photo/profile or are explicitly supplied.
-- The child must look the supplied age. Never age a toddler into a school-age child or reduce an older child into a baby-like mascot.
 - Keep child anatomy natural and age-appropriate. Exactly two eyes, one nose, one mouth, two arms, two hands, two legs, and two feet unless the scene explicitly hides a body part.
 - Never duplicate, merge, or relocate accessories. Goggles belong either over both eyes or resting once on the forehead/neck as the scene requires; never create extra lenses, straps, glasses, or floating accessory pieces.
 - Expressions must remain warm and believable. Avoid enormous glassy eyes, stretched open mouths, excessive visible teeth, uncanny grins, doll-like skin, or distorted cheeks.
@@ -95,7 +88,8 @@ Composition and safety requirements:
 - Obey the continuity bible and setting logic literally. Do not substitute a different vehicle, species, plant product, furniture item, or companion. Do not show pinecones growing on palm trees or any comparable real-world category error.
 - Compare the current scene to the previous scene and avoid unexplained changes. If a locked detail is absent from the current scene, do not redesign it when it returns later.
 - Vary settings and staging so the book feels like a journey. Do not recycle the same porch, yard, room, or generic backdrop when the story implies progress.
-- Follow the selected style while preserving natural, stable, individualized child facial features.
+- If STYLE NAME is "Whimsical Storybook", make the scene noticeably more colorful, playful, curving, and imaginative than a standard watercolor page.
+- ${isPersonalized2D ? 'For Personalized 2D Storybook, render the child with recognizable individualized facial structure and gently dimensional features, while keeping backgrounds, props, lighting, and textures clean and economical. Do not flatten the child into a generic mascot. Do not imitate any named artist, studio, franchise, or existing picture book.' : 'Follow the selected style while preserving natural, stable child facial features.'}
 - Portrait page dimensions with cinematic visual depth; vary character scale and placement rather than centering the child on every page.
 - ${kind === 'cover' ? 'Create a strong cover-worthy focal composition with room near the upper area, but do not render a title.' : 'Compose as a finished interior picture-book page.'}
 - No written words, letters, captions, logos, watermarks, frames, or speech bubbles.
@@ -120,7 +114,8 @@ export async function POST(request) {
     const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
     const size = process.env.OPENAI_IMAGE_SIZE || '1024x1536';
     const requestedQuality = String(input.quality || '').toLowerCase();
-    const styleDefaultQuality = process.env.OPENAI_IMAGE_QUALITY || 'medium';
+    const styleId = normalizeAmiStyle(input.style);
+    const styleDefaultQuality = styleId === 'Personalized 2D Storybook' ? 'low' : (process.env.OPENAI_IMAGE_QUALITY || 'medium');
     const quality = ['low', 'medium', 'high'].includes(requestedQuality) ? requestedQuality : (input.productType === 'mini' ? 'low' : styleDefaultQuality);
     const scenePrompt = input?.kind === 'cover' ? input?.page?.coverPrompt || input?.page?.illustrationPrompt : input?.page?.illustrationPrompt;
     if (!scenePrompt) {
@@ -135,7 +130,7 @@ export async function POST(request) {
       try {
         const body = new FormData();
         body.append('model', model);
-        body.append('prompt', `${buildImagePrompt(input)}\nUse the attached images as ordered references: the child photo is authoritative for face, age, hair, skin tone, and unique visible traits; the illustrated anchor is authoritative only for wardrobe, palette, and recurring design continuity. Never let the anchor overwrite the real child's identity. Create a new scene, not a copy of either reference.`);
+        body.append('prompt', `${buildImagePrompt(input)}\nUse the attached images only as continuity references. The child photo establishes likeness; the visual anchor establishes the exact illustrated character, wardrobe, palette, and recurring prop design. Create a new scene, not a copy of either reference.`);
         for (const source of editSources) {
           const sourceResponse = await fetch(source.url);
           if (!sourceResponse.ok) throw new Error(`${source.role} could not be loaded (${sourceResponse.status}).`);
