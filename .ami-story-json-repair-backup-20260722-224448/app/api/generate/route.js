@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { jsonrepair } from 'jsonrepair';
 import { authenticateRequest } from '../../../lib/supabase-server';
 import { getAdminClient } from '../../../lib/billing-server';
 import { estimateTextCostMicros, recordAiUsage } from '../../../lib/ai-tracking';
@@ -279,23 +278,14 @@ function extractJson(text = '') {
     .replace(/```$/i, '')
     .trim();
 
-  const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-  const candidates = [cleaned];
-  if (start >= 0 && end > start) candidates.push(cleaned.slice(start, end + 1));
-
-  for (const candidate of candidates) {
-    try {
-      return JSON.parse(candidate);
-    } catch {}
-    try {
-      const repaired = jsonrepair(candidate);
-      const parsed = JSON.parse(repaired);
-      console.warn('AMI repaired a malformed story JSON response before validation.');
-      return parsed;
-    } catch {}
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start >= 0 && end > start) return JSON.parse(cleaned.slice(start, end + 1));
+    throw new Error('The model response did not contain valid JSON.');
   }
-  throw new Error('The model response did not contain repairable JSON.');
 }
 
 function validateStory(story, expectedPages) {
