@@ -2,13 +2,24 @@ import { NextResponse } from 'next/server';
 import { authenticateRequest } from '../../../lib/supabase-server';
 import { getAdminClient } from '../../../lib/billing-server';
 import { estimateTextCostMicros, recordAiUsage } from '../../../lib/ai-tracking';
-import { getAmiStylePrompt, normalizeAmiStyle } from '../../../lib/ami-styles';
+import { getAmiStylePlanningNotes, getAmiStylePrompt, normalizeAmiStyle } from '../../../lib/ami-styles';
 
 function demoStory(input) {
   const name = input.childName || 'August';
   const count = Math.max(5, Math.min(16, Number(input.length) || 10));
   const appearance = input.appearance || 'a cheerful child with a warm, curious expression';
   const wardrobe = input.appearance || 'cozy green pajamas and yellow rain boots';
+  const recurringProps = [{
+    name: 'glowing dinosaur egg',
+    description: 'plum-sized egg with tiny golden spots',
+    color: 'warm cream and gold',
+    scale: 'smaller than the child’s hand',
+    rules: 'Never change size, markings, or material.'
+  }];
+  const sceneLocations = ['sunflower garden corner', 'vegetable path by the fence', 'fern-lined trail', 'wobbly creek bridge', 'moonlit forest clearing'];
+  const framings = ['wide establishing shot', 'medium action shot', 'over-the-shoulder discovery view', 'low-angle wonder shot', 'intimate close emotional moment'];
+  const lights = ['golden afternoon', 'soft late-afternoon glow', 'cool forest shade', 'sparkling evening light', 'gentle moonlight'];
+  const moods = ['curious', 'surprised', 'brave', 'hopeful', 'comforted'];
   const beats = [
     `${name} noticed something glowing beneath the old sunflower leaves. It was no bigger than a plum, warm as toast, and covered in tiny golden spots.`,
     `When ${name} gently picked it up, the little egg gave a cheerful wobble. From inside came the faintest sound: tap… tap… squeak!`,
@@ -21,23 +32,44 @@ function demoStory(input) {
     `The dinosaur family thanked ${name} with a smooth, star-shaped stone that shimmered whenever someone did something kind.`,
     `That night, tucked safely into bed, ${name} placed the stone beside the pillow. It gave one tiny glow, as if to say: every brave adventure begins with a kind heart.`
   ];
-  const pages = Array.from({ length: count }, (_, index) => ({
-    pageNumber: index + 1,
-    text: beats[index % beats.length],
-    illustrationPrompt: `${getAmiStylePrompt(input.style)}. Children's book illustration of ${name}, ${appearance}, wearing ${wardrobe}, ${index < 2 ? 'discovering a tiny glowing dinosaur egg in a magical backyard' : index < count - 2 ? 'traveling with a tiny friendly dinosaur through a whimsical fern forest' : 'reuniting the baby dinosaur with its gentle family beneath a moonlit sky'}. Warm, safe, expressive, consistent character design, no text in image.`
-  }));
+  const pages = Array.from({ length: count }, (_, index) => {
+    const phase = index < 2 ? 'discovering a tiny glowing dinosaur egg in a magical backyard' : index < count - 2 ? 'traveling with a tiny friendly dinosaur through a whimsical fern forest' : 'reuniting the baby dinosaur with its gentle family beneath a moonlit sky';
+    return {
+      pageNumber: index + 1,
+      text: beats[index % beats.length],
+      sceneLocation: sceneLocations[index % sceneLocations.length],
+      continuityNotes: `Keep ${name}'s appearance and wardrobe unchanged. The glowing dinosaur egg must remain plum-sized, warm cream with tiny golden spots, and smaller than the child’s hand whenever shown.`,
+      recurringProps: index <= 5 ? ['glowing dinosaur egg'] : ['star-shaped stone'],
+      scenePlan: {
+        action: phase,
+        framing: framings[index % framings.length],
+        lighting: lights[index % lights.length],
+        mood: moods[index % moods.length],
+        foregroundDetail: index % 2 === 0 ? 'leafy plants and stepping stones' : 'roots, pebbles, or bridge planks close to the camera',
+        backgroundDetail: index % 2 === 0 ? 'fence lines, garden beds, or distant trees' : 'layered forest depth, a path, or a moonlit clearing',
+        environmentBeat: index < 3 ? 'home garden world' : index < count - 2 ? 'journey deeper into the forest' : 'safe reunion and return'
+      },
+      illustrationPrompt: `${getAmiStylePrompt(input.style)}. Children's book illustration of ${name}, ${appearance}, wearing ${wardrobe}, ${phase} in the ${sceneLocations[index % sceneLocations.length]}. Show a clear action, visible emotion through body language, layered foreground and background detail, ${lights[index % lights.length]}, ${framings[index % framings.length]}, and a complete environment. consistent character design, no text in image.`
+    };
+  });
   return {
     title: `${name} and the Glowing Dinosaur Egg`,
     summary: `A gentle ${input.theme?.toLowerCase() || 'adventure'} about helping a lost baby dinosaur find its family.`,
     takeaway: input.lesson || 'Being brave can mean taking one careful step and asking for help.',
-    coverPrompt: `${getAmiStylePrompt(input.style)}. Children’s picture-book cover illustration of ${name}, ${appearance}, wearing ${wardrobe}, holding a softly glowing dinosaur egg beneath a moonlit sky. Strong focal composition, magical but comforting, no written title or text, consistent character design.`,
+    coverPrompt: `${getAmiStylePrompt(input.style)}. Children’s picture-book cover illustration of ${name}, ${appearance}, wearing ${wardrobe}, holding a softly glowing dinosaur egg in a lush magical garden under a moonlit sky, with rich foreground plants, layered background trees, and a strong focal composition. No written title or text. consistent character design, no text in image.`,
     characterBible: {
       name,
       description: `${name}, age ${input.age}, ${appearance}`,
       lockedWardrobe: wardrobe,
       visualAnchor: 'same face, hair, age, proportions, clothing, and color palette on every page'
     },
-    continuityBible: { worldDescription: 'A coherent whimsical garden and fern forest', colorPalette: 'warm gold, fern green, moonlit blue', recurringProps: [{ name: 'glowing dinosaur egg', description: 'plum-sized egg with tiny golden spots', color: 'warm cream and gold', scale: 'smaller than the child’s hand', rules: 'Never change size, markings, or material.' }], settingLogic: ['Plants and objects must behave naturally unless magic is explicitly described.'], forbiddenChanges: ['No unexplained wardrobe, prop color, species, or scale changes.'] },
+    continuityBible: {
+      worldDescription: 'A coherent whimsical garden that opens into a fern forest and then a moonlit reunion clearing',
+      colorPalette: 'warm gold, fern green, moonlit blue',
+      recurringProps,
+      settingLogic: ['Plants and objects must behave naturally unless magic is explicitly described.', 'A toy or miniature object must never become full-sized.', 'Scenes should progress through believable locations rather than repeating the same generic backdrop.'],
+      forbiddenChanges: ['No unexplained wardrobe, prop color, species, or scale changes.', 'Do not redesign recurring props between pages.', 'Do not substitute a different vehicle, companion, or object for a locked recurring item.']
+    },
     language: input.language || 'en',
     dedication: input.dedication || '',
     pages
@@ -50,11 +82,10 @@ function pronounInstruction(value) {
 }
 
 function languageInstruction(value) {
-  if (value === 'es') return `Write every reader-visible field in natural, age-appropriate Spanish. This includes title, summary, takeaway, and every page text. Do not include English translations. Illustration prompts must remain in English.`;
-  if (value === 'en-es') return `Create a genuinely bilingual English-Spanish book. For title, summary, and takeaway, provide English first, then Spanish separated by " / ". For every page text, write a concise English paragraph followed by a blank line and then a natural Spanish rendering prefixed "Español: ". Do not translate word-for-word when a more natural child-friendly Spanish phrase works better. Keep illustration prompts entirely in English.`;
-  return `Write every reader-visible field in natural, age-appropriate English. Illustration prompts must also be in English.`;
+  if (value === 'es') return 'Write every reader-visible field in natural, age-appropriate Spanish. This includes title, summary, takeaway, and every page text. Do not include English translations. Illustration prompts must remain in English.';
+  if (value === 'en-es') return 'Create a genuinely bilingual English-Spanish book. For title, summary, and takeaway, provide English first, then Spanish separated by " / ". For every page text, write a concise English paragraph followed by a blank line and then a natural Spanish rendering prefixed "Español: ". Do not translate word-for-word when a more natural child-friendly Spanish phrase works better. Keep illustration prompts entirely in English.';
+  return 'Write every reader-visible field in natural, age-appropriate English. Illustration prompts must also be in English.';
 }
-
 
 function ageWritingProfile(ageValue, language) {
   const age = Math.max(2, Math.min(10, Number(ageValue) || 4));
@@ -91,8 +122,25 @@ function ageWritingProfile(ageValue, language) {
   };
 }
 
+function visualProgressionRules(pageCount) {
+  const count = Math.max(3, Math.min(16, Number(pageCount) || 10));
+  return [
+    `Plan the book as a visual journey across ${count} pages. Use scene progression rather than repeating the same yard, room, or neutral backdrop.`,
+    count <= 4
+      ? 'Use at least 3 distinct micro-settings or visual situations across the book.'
+      : count <= 8
+        ? 'Use at least 4 distinct micro-settings or visual situations across the book.'
+        : 'Use at least 5 distinct micro-settings or visual situations across the book.',
+    'Change not just the crop, but also the environment, staging, and action whenever the story beat changes.',
+    'Adjacent pages must not repeat the same framing, emotional beat, or background type.'
+  ].join(' ');
+}
+
 function buildPrompt(input) {
   const ageProfile = ageWritingProfile(input.age, input.language);
+  const styleId = normalizeAmiStyle(input.style);
+  const stylePrompt = getAmiStylePrompt(input.style);
+  const stylePlanningNotes = getAmiStylePlanningNotes(input.style);
   const isChallenge = input.storyMode === 'Challenge';
   const modeContext = isChallenge
     ? `This is a CHALLENGE STORY.
@@ -107,21 +155,23 @@ Parent story idea: ${input.storyIdea || 'Create a playful original adventure.'}
 
 Do not mention, imply, reuse, or resolve any childhood challenge, milestone, pacifier transition, emotional struggle, or prior challenge selection unless the parent explicitly included it in the fun-story idea.`;
 
-  return `You are a thoughtful children's storybook author. Create a safe, warm, age-appropriate personalized story for a ${input.age}-year-old child.
+  return `You are a thoughtful children's storybook author and visual planner. Create a safe, warm, age-appropriate personalized story for a ${input.age}-year-old child.
 
 Child: ${input.childName}
 ${pronounInstruction(input.pronouns)}
 Appearance notes from family: ${input.appearance || 'not specified'}
 Photo-derived visual profile: ${input.referencePhotoAnalysis ? JSON.stringify(input.referencePhotoAnalysis) : 'no reference photo supplied'}
 When a photo-derived profile is supplied, use it as the primary visual reference while keeping the result stylized, child-friendly, and non-photorealistic. Do not infer sensitive traits or identity.
+Preserve the child's recognizable supplied traits without exaggerating the eyes, mouth, teeth, cheeks, head size, or body proportions.
 Book language: ${input.language || 'en'}
 ${languageInstruction(input.language)}
 Dedication supplied by the family: ${input.dedication || 'none'}
 ${modeContext}
 Favorite elements: ${input.favorites || 'none specified'}
 Optional lesson or value: ${input.lesson || 'a gentle positive emotional resolution'}
-Visual style name: ${normalizeAmiStyle(input.style)}
-Visual style art direction: ${getAmiStylePrompt(input.style)}
+Visual style name: ${styleId}
+Visual style art direction: ${stylePrompt}
+Visual style planning notes: ${stylePlanningNotes}
 Page count: ${input.length}
 
 Requirements:
@@ -138,15 +188,18 @@ Requirements:
 - Avoid graphic danger, death, weapons, adult themes, or medical claims.
 - Use the child's name naturally without overusing it.
 - Do not output HTML entities, HTML tags, or stray symbol sequences such as "&>" in any reader-visible text.
+- Before writing the pages, silently build a continuity bible and a hidden scene planner for the entire book.
+- ${visualProgressionRules(input.length)}
 - Return only valid JSON matching this structure:
-{"title":"","summary":"","takeaway":"","coverPrompt":"","characterBible":{"name":"","description":"","lockedWardrobe":"","visualAnchor":""},"continuityBible":{"worldDescription":"","colorPalette":"","recurringProps":[{"name":"","description":"","color":"","scale":"","rules":""}],"settingLogic":[""],"forbiddenChanges":[""]},"pages":[{"pageNumber":1,"text":"","sceneLocation":"","continuityNotes":"","recurringProps":[""],"illustrationPrompt":""}]}
+{"title":"","summary":"","takeaway":"","coverPrompt":"","characterBible":{"name":"","description":"","lockedWardrobe":"","visualAnchor":""},"continuityBible":{"worldDescription":"","colorPalette":"","recurringProps":[{"name":"","description":"","color":"","scale":"","rules":""}],"settingLogic":[""],"forbiddenChanges":[""]},"pages":[{"pageNumber":1,"text":"","sceneLocation":"","continuityNotes":"","recurringProps":[""],"scenePlan":{"action":"","framing":"","lighting":"","mood":"","foregroundDetail":"","backgroundDetail":"","environmentBeat":""},"illustrationPrompt":""}]}
 - coverPrompt must describe one polished portrait cover scene without title text.
 - Build a continuityBible before planning pages. Identify every recurring object, vehicle, companion, outfit, and environment feature that must remain stable. Specify exact color, material, relative scale, and rules.
 - If an object is a toy, miniature, stuffed animal, or child-sized item, explicitly lock that scale and forbid depicting it as full-sized.
 - settingLogic must state simple real-world constraints relevant to the chosen environment (for example, palm trees do not grow pinecones; indoor objects do not appear outdoors without a story reason).
-- forbiddenChanges must list likely visual drift to prevent: color swaps, scale changes, wardrobe changes, species/object substitutions, and unexplained setting changes.
-- Each page must include sceneLocation, continuityNotes, and recurringProps. The illustrationPrompt must restate the exact locked appearance of any recurring prop shown on that page.
+- forbiddenChanges must list likely visual drift to prevent: color swaps, scale changes, wardrobe changes, species or object substitutions, and unexplained setting changes.
+- Each page must include sceneLocation, continuityNotes, recurringProps, and scenePlan. The illustrationPrompt must restate the exact locked appearance of any recurring prop shown on that page.
 - Treat the illustrations as a visual sequence, not a collection of character portraits.
+- Every scenePlan must define: action, framing, lighting, mood, foregroundDetail, backgroundDetail, and environmentBeat.
 - Every illustrationPrompt must explicitly include: the setting, a visible action, the child's emotion through body language, meaningful props or companions, foreground detail, background detail, lighting, and a camera framing.
 - Use varied framing across the book: establishing wide shot, medium interaction, close emotional detail, low-angle wonder, overhead discovery, or over-the-shoulder view. Never use the same framing on adjacent pages.
 - No more than one page in the entire book may be a simple portrait. Do not place the child standing alone against a plain, blank, studio, gradient, or empty background unless the story absolutely requires it.
@@ -183,18 +236,38 @@ function cleanGeneratedStory(story) {
       ...story.continuityBible,
       worldDescription: cleanGeneratedText(story.continuityBible.worldDescription || ''),
       colorPalette: cleanGeneratedText(story.continuityBible.colorPalette || ''),
-      recurringProps: Array.isArray(story.continuityBible.recurringProps) ? story.continuityBible.recurringProps.map((prop) => ({ ...prop, name: cleanGeneratedText(prop.name || ''), description: cleanGeneratedText(prop.description || ''), color: cleanGeneratedText(prop.color || ''), scale: cleanGeneratedText(prop.scale || ''), rules: cleanGeneratedText(prop.rules || '') })) : [],
+      recurringProps: Array.isArray(story.continuityBible.recurringProps)
+        ? story.continuityBible.recurringProps.map((prop) => ({
+          ...prop,
+          name: cleanGeneratedText(prop.name || ''),
+          description: cleanGeneratedText(prop.description || ''),
+          color: cleanGeneratedText(prop.color || ''),
+          scale: cleanGeneratedText(prop.scale || ''),
+          rules: cleanGeneratedText(prop.rules || '')
+        }))
+        : [],
       settingLogic: Array.isArray(story.continuityBible.settingLogic) ? story.continuityBible.settingLogic.map(cleanGeneratedText) : [],
       forbiddenChanges: Array.isArray(story.continuityBible.forbiddenChanges) ? story.continuityBible.forbiddenChanges.map(cleanGeneratedText) : []
     } : story.continuityBible,
-    pages: Array.isArray(story.pages) ? story.pages.map((page) => ({
-      ...page,
-      text: cleanGeneratedText(page.text || ''),
-      sceneLocation: cleanGeneratedText(page.sceneLocation || ''),
-      continuityNotes: cleanGeneratedText(page.continuityNotes || ''),
-      recurringProps: Array.isArray(page.recurringProps) ? page.recurringProps.map(cleanGeneratedText) : [],
-      illustrationPrompt: cleanGeneratedText(page.illustrationPrompt || '')
-    })) : story.pages
+    pages: Array.isArray(story.pages)
+      ? story.pages.map((page) => ({
+        ...page,
+        text: cleanGeneratedText(page.text || ''),
+        sceneLocation: cleanGeneratedText(page.sceneLocation || ''),
+        continuityNotes: cleanGeneratedText(page.continuityNotes || ''),
+        recurringProps: Array.isArray(page.recurringProps) ? page.recurringProps.map(cleanGeneratedText) : [],
+        scenePlan: page.scenePlan ? {
+          action: cleanGeneratedText(page.scenePlan.action || ''),
+          framing: cleanGeneratedText(page.scenePlan.framing || ''),
+          lighting: cleanGeneratedText(page.scenePlan.lighting || ''),
+          mood: cleanGeneratedText(page.scenePlan.mood || ''),
+          foregroundDetail: cleanGeneratedText(page.scenePlan.foregroundDetail || ''),
+          backgroundDetail: cleanGeneratedText(page.scenePlan.backgroundDetail || ''),
+          environmentBeat: cleanGeneratedText(page.scenePlan.environmentBeat || '')
+        } : undefined,
+        illustrationPrompt: cleanGeneratedText(page.illustrationPrompt || '')
+      }))
+      : story.pages
   };
 }
 

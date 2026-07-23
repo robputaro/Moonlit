@@ -59,6 +59,9 @@ const fallbackEngagementCards = [
 const AMI_DRAFT_KEY = 'ami-story-draft-v1';
 const AMI_ENGAGEMENT_HISTORY_KEY = 'ami-engagement-history-v1';
 const AMI_DRAFT_MAX_PHOTO_LENGTH = 2_000_000;
+const AMI_ADVENTURE_PROMPT_SEEN_KEY = 'ami-adventure-prompt-seen-v1';
+const AMI_ADVENTURE_INTEREST_KEY = 'ami-adventure-interest-v1';
+const AMI_ADVENTURE_PROMPT_COOLDOWN = 7 * 24 * 60 * 60 * 1000;
 
 function canonicalSiteUrl() {
   const configured = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '');
@@ -297,6 +300,7 @@ export default function Home() {
   const [draftMessage, setDraftMessage] = useState('');
   const [draftReady, setDraftReady] = useState(false);
   const [generationAllProgress, setGenerationAllProgress] = useState({ current: 0, total: 0 });
+  const [adventurePromptOpen, setAdventurePromptOpen] = useState(false);
   const [engagementAnswers, setEngagementAnswers] = useState({});
   const [surpriseMessage, setSurpriseMessage] = useState('');
   const [engagementCardIndex, setEngagementCardIndex] = useState(0);
@@ -362,6 +366,31 @@ export default function Home() {
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (themeMeta) themeMeta.setAttribute('content', theme === 'dark' ? '#12101d' : '#f7f0e5');
   }, [theme]);
+
+  useEffect(() => {
+    if (!adventureBooksEnabled || step !== 'create' || loading || story) return undefined;
+    const lastSeen = Number(window.localStorage.getItem(AMI_ADVENTURE_PROMPT_SEEN_KEY) || 0);
+    const alreadyInterested = window.localStorage.getItem(AMI_ADVENTURE_INTEREST_KEY) === 'true';
+    if (alreadyInterested || Date.now() - lastSeen < AMI_ADVENTURE_PROMPT_COOLDOWN) return undefined;
+
+    let previousY = window.scrollY;
+    let furthestRatio = 0;
+    const onScroll = () => {
+      const pageRange = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      const ratio = Math.min(1, window.scrollY / pageRange);
+      furthestRatio = Math.max(furthestRatio, ratio);
+      const intentionallyReturning = furthestRatio >= 0.3 && window.scrollY < previousY - 14;
+      const exploredEnough = ratio >= 0.45;
+      previousY = window.scrollY;
+      if (!intentionallyReturning && !exploredEnough) return;
+      window.localStorage.setItem(AMI_ADVENTURE_PROMPT_SEEN_KEY, String(Date.now()));
+      setAdventurePromptOpen(true);
+      window.removeEventListener('scroll', onScroll);
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [adventureBooksEnabled, step, loading, story]);
 
   useEffect(() => {
     if (story?.summary && !backCoverBlurb) setBackCoverBlurb(decodeHtmlEntities(story.summary));
@@ -757,8 +786,10 @@ export default function Home() {
     setReferencePhotoAnalysis(null);
   }
 
-  function illustrationQualityFor(productType) {
-    return productType === 'mini' ? 'low' : 'medium';
+  function illustrationQualityFor(productType, style, kind) {
+    if (productType === 'mini') return 'low';
+    if (normalizeAmiStyle(style) === 'Personalized 2D Storybook') return kind === 'cover' ? 'medium' : 'low';
+    return 'medium';
   }
 
   async function requestStoryIllustration({ activeStory, activeStoryId, kind = 'page', page, anchorImage = '', priorScene = '', operation }) {
@@ -771,14 +802,14 @@ export default function Home() {
         style: form.style,
         characterBible: activeStory.characterBible,
         continuityBible: activeStory.continuityBible || {},
-        referencePhoto: activeStory.referencePhotoUrl || referencePhoto || '',
+        referencePhoto: anchorImage ? '' : (activeStory.referencePhotoUrl || referencePhoto || ''),
         referencePhotoAnalysis: activeStory.referencePhotoAnalysis || referencePhotoAnalysis,
         anchorImage,
         priorScene,
         page,
         storyId: activeStoryId,
         productType: activeStory.productType || 'full',
-        quality: illustrationQualityFor(activeStory.productType),
+        quality: illustrationQualityFor(activeStory.productType, form.style, kind),
         operation: operation || (kind === 'cover' ? 'cover_generation' : 'page_generation')
       })
     });
@@ -816,13 +847,13 @@ export default function Home() {
 
       const anchorImage = workingStory.coverImageUrl || '';
       const remaining = workingStory.pages.map((page, index) => ({ page, index })).filter(({ page }) => !page.imageUrl);
-      const batchSize = workingStory.productType === 'mini' ? 2 : 3;
+      const batchSize = workingStory.productType === 'mini' ? 3 : 5;
       let completed = workingStory.pages.filter((page) => page.imageUrl).length;
 
       for (let start = 0; start < remaining.length; start += batchSize) {
         const batch = remaining.slice(start, start + batchSize);
-        setLoadingMessage(`Painting pages ${completed + 1}–${Math.min(completed + batch.length, workingStory.pages.length)}…`);
-        const results = await Promise.all(batch.map(async ({ page, index }) => ({
+        setLoadingMessage(`Illustrating ${batch.length} pages together…`);
+        const settled = await Promise.allSettled(batch.map(async ({ page, index }) => ({
           index,
           imageUrl: await requestStoryIllustration({
             activeStory: workingStory,
@@ -833,6 +864,24 @@ export default function Home() {
             operation: 'page_generation'
           })
         })));
+        const results = settled.filter((result) => result.status === 'fulfilled').map((result) => result.value);
+        const failed = settled.map((result, index) => result.status === 'rejected' ? batch[index] : null).filter(Boolean);
+        if (failed.length) {
+          setLoadingMessage(`Retrying ${failed.length} page${failed.length === 1 ? '' : 's'} that need another pass…`);
+          const retries = await Promise.allSettled(failed.map(async ({ page, index }) => ({
+            index,
+            imageUrl: await requestStoryIllustration({
+              activeStory: workingStory,
+              activeStoryId,
+              page,
+              anchorImage,
+              priorScene: index > 0 ? workingStory.pages[index - 1]?.illustrationPrompt || '' : '',
+              operation: 'page_generation_retry'
+            })
+          })));
+          results.push(...retries.filter((result) => result.status === 'fulfilled').map((result) => result.value));
+        }
+        if (!results.length) throw new Error('AMI could not finish this group of illustrations. The completed pages are saved; please continue the book from Review.');
         const pageMap = new Map(results.map((result) => [result.index, result.imageUrl]));
         workingStory = {
           ...workingStory,
@@ -1918,14 +1967,14 @@ export default function Home() {
       <section className="shell">
         {adventureBooksEnabled && <section className="ami-adventure-home-spotlight" aria-label="Free AMI Adventure Book">
           <div className="ami-adventure-home-copy">
-            <span>FREE PERSONALIZED PRINTABLE</span>
-            <h2>Create their first AMI Adventure Book.</h2>
-            <p>Twenty age-appropriate pages of coloring, puzzles, tracing, drawing, and creative play—personalized with your child’s name and favorite world.</p>
-            <div className="ami-adventure-home-details"><small>Free digital PDF</small><small>Ages 2–10</small><small>No story credit needed</small></div>
+            <span>PERSONALIZED PRINTABLE <b>FREE</b></span>
+            <h2>Create Their First AMI Adventure Book — Free.</h2>
+            <p>A polished 15-page sampler of coloring, puzzles, tracing, drawing, and creative play—personalized with your child’s name, age, and favorite world.</p>
+            <div className="ami-adventure-home-details"><small>Free digital sampler</small><small>Ages 2–10</small><small>No payment required</small></div>
           </div>
           <div className="ami-adventure-home-action">
-            <div className="ami-adventure-mini-cover" aria-hidden="true"><i>AMI ADVENTURE BOOK</i><b>✦</b><strong>Made for them</strong><small>20 PAGES</small></div>
-            <a href="/adventure-book">Create their free book <span>→</span></a>
+            <div className="ami-adventure-mini-cover" aria-hidden="true"><i>AMI ADVENTURE BOOK</i><b>✦</b><strong>Made for them</strong><small>FREE SAMPLER</small></div>
+            <a href="/adventure-book" onClick={() => window.localStorage.setItem(AMI_ADVENTURE_INTEREST_KEY, 'true')}>Create their free book <span>→</span></a>
             <small>Or continue below to create a personalized Storybook.</small>
           </div>
         </section>}
@@ -2250,6 +2299,14 @@ export default function Home() {
             <div className="reader-nav"><button disabled={pageIndex === 0} onClick={() => setPageIndex((i) => i - 1)}>← Previous</button><div className="dots">{story.pages.map((_, i) => <button aria-label={`Page ${i+1}`} key={i} className={i === pageIndex ? 'active' : ''} onClick={() => setPageIndex(i)} />)}</div><button disabled={pageIndex === story.pages.length - 1} onClick={() => setPageIndex((i) => i + 1)}>Next →</button></div>
           </section>
         )}
+
+        {adventurePromptOpen && <div className="ami-adventure-prompt-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setAdventurePromptOpen(false); }}>
+          <section className="ami-adventure-prompt" role="dialog" aria-modal="true" aria-label="Free personalized AMI Adventure Book">
+            <button type="button" className="ami-adventure-prompt-close" onClick={() => setAdventurePromptOpen(false)} aria-label="Close">×</button>
+            <div className="ami-adventure-prompt-cover" aria-hidden="true"><small>AMI ADVENTURE BOOK</small><b>✦</b><strong>Made for them</strong><i>FREE SAMPLER</i></div>
+            <div className="ami-adventure-prompt-copy"><span>PERSONALIZED PRINTABLE <b>FREE</b></span><h2>Create Their First AMI Adventure Book.</h2><p>Personalized for their name, age, and favorite theme. Download a 15-page printable sampler in minutes.</p><a href="/adventure-book" onClick={() => window.localStorage.setItem(AMI_ADVENTURE_INTEREST_KEY, 'true')}>Create Their Free Adventure Book <i>→</i></a><small>No payment required · Ready to print</small></div>
+          </section>
+        </div>}
 
         {authOpen && <div className="auth-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setAuthOpen(false); }}>
           <section className="auth-modal" role="dialog" aria-modal="true" aria-label="AMI account">

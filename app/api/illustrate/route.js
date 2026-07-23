@@ -1,21 +1,23 @@
 import { NextResponse } from 'next/server';
 import { authenticateRequest } from '../../../lib/supabase-server';
 import { estimateImageCostMicros, recordAiUsage } from '../../../lib/ai-tracking';
-import { getAmiStylePrompt, normalizeAmiStyle } from '../../../lib/ami-styles';
+import { getAmiStylePlanningNotes, getAmiStylePrompt, normalizeAmiStyle } from '../../../lib/ami-styles';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-function buildImagePrompt({ storyTitle, style, characterBible, page, kind }) {
+function buildImagePrompt({ storyTitle, style, characterBible, continuityBible = {}, page, kind, referencePhotoAnalysis, priorScene = '' }) {
   const character = characterBible?.description || 'a cheerful young child with a warm, expressive face';
   const wardrobe = characterBible?.lockedWardrobe || 'a simple, age-appropriate outfit that remains identical on every page';
   const visualAnchor = characterBible?.visualAnchor || 'same face, hair, age, proportions, outfit, and palette throughout the book';
-  const continuityBible = arguments[0]?.continuityBible || {};
-  const continuityText = JSON.stringify(continuityBible);
-  const priorScene = arguments[0]?.priorScene || '';
+  const continuityText = JSON.stringify(continuityBible || {});
   const scene = kind === 'cover' ? page?.coverPrompt || page?.illustrationPrompt : page?.illustrationPrompt;
-  const photoProfile = arguments[0]?.referencePhotoAnalysis ? `\nPHOTO-DERIVED PROFILE: ${JSON.stringify(arguments[0].referencePhotoAnalysis)}` : '';
+  const styleId = normalizeAmiStyle(style);
+  const stylePrompt = getAmiStylePrompt(style);
+  const stylePlanning = getAmiStylePlanningNotes(style);
+  const photoProfile = referencePhotoAnalysis ? `\nPHOTO-DERIVED PROFILE: ${JSON.stringify(referencePhotoAnalysis)}` : '';
   const pageNumber = Number(page?.pageNumber || 1);
+  const scenePlan = page?.scenePlan || {};
   const framingSequence = [
     'wide establishing shot with layered environment and the character actively entering the scene',
     'medium action shot focused on interaction with a prop, companion, or part of the setting',
@@ -24,14 +26,16 @@ function buildImagePrompt({ storyTitle, style, characterBible, page, kind }) {
     'intimate close-to-medium emotional moment where hands, posture, and expression tell the story',
     'high or overhead view that clearly shows movement through the setting'
   ];
-  const preferredFraming = framingSequence[(Math.max(1, pageNumber) - 1) % framingSequence.length];
+  const preferredFraming = scenePlan.framing || framingSequence[(Math.max(1, pageNumber) - 1) % framingSequence.length];
+  const isPersonalized2D = styleId === 'Personalized 2D Storybook';
 
   return `Create one polished portrait illustration for a children's picture book.
 
 BOOK: ${storyTitle || 'AMI Story'}
 IMAGE TYPE: ${kind === 'cover' ? 'front cover artwork without any words' : 'interior story page'}
-STYLE NAME: ${normalizeAmiStyle(style)}
-ART DIRECTION: ${getAmiStylePrompt(style)}
+STYLE NAME: ${styleId}
+ART DIRECTION: ${stylePrompt}
+STYLE ENFORCEMENT: ${stylePlanning}
 
 LOCKED MAIN CHARACTER:
 ${character}
@@ -50,6 +54,15 @@ ${page?.sceneLocation || 'Use the location described in the scene.'}
 CURRENT PAGE CONTINUITY NOTES:
 ${page?.continuityNotes || 'Preserve all locked details.'}
 
+SCENE PLAN:
+Action: ${scenePlan.action || 'Show the story beat in action.'}
+Framing: ${preferredFraming}
+Lighting: ${scenePlan.lighting || 'story-appropriate warm lighting'}
+Mood: ${scenePlan.mood || 'warm and expressive'}
+Foreground detail: ${scenePlan.foregroundDetail || 'include meaningful foreground detail'}
+Background detail: ${scenePlan.backgroundDetail || 'include layered background storytelling'}
+Environment beat: ${scenePlan.environmentBeat || 'visually advance the journey'}
+
 RECURRING PROPS REQUIRED ON THIS PAGE:
 ${Array.isArray(page?.recurringProps) ? page.recurringProps.join(', ') : 'none specified'}
 
@@ -66,9 +79,17 @@ Composition and safety requirements:
 - Avoid passport-photo framing, fashion poses, repeated neutral standing poses, and generic character showcase compositions.
 - Child-friendly, comforting, whimsical, and appropriate for young children.
 - Preserve the exact character description, face, hair, clothing, age, proportions, and palette.
+- Preserve a stable facial identity: face shape, hairline and curl pattern, eye color, skin tone, nose shape, glasses, freckles, and other supplied traits must not drift between pages.
+- Keep child anatomy natural and age-appropriate. Exactly two eyes, one nose, one mouth, two arms, two hands, two legs, and two feet unless the scene explicitly hides a body part.
+- Never duplicate, merge, or relocate accessories. Goggles belong either over both eyes or resting once on the forehead/neck as the scene requires; never create extra lenses, straps, glasses, or floating accessory pieces.
+- Expressions must remain warm and believable. Avoid enormous glassy eyes, stretched open mouths, excessive visible teeth, uncanny grins, doll-like skin, or distorted cheeks.
+- Secondary characters must follow their locked description. Do not change a teacher, parent, sibling, or companion's gender presentation, hair, clothing, or apparent age between pages.
 - Treat every recurring prop like a cast member: preserve its exact design, color, material, markings, and relative scale. A toy or miniature must never become a full-sized real object.
 - Obey the continuity bible and setting logic literally. Do not substitute a different vehicle, species, plant product, furniture item, or companion. Do not show pinecones growing on palm trees or any comparable real-world category error.
 - Compare the current scene to the previous scene and avoid unexplained changes. If a locked detail is absent from the current scene, do not redesign it when it returns later.
+- Vary settings and staging so the book feels like a journey. Do not recycle the same porch, yard, room, or generic backdrop when the story implies progress.
+- If STYLE NAME is "Whimsical Storybook", make the scene noticeably more colorful, playful, curving, and imaginative than a standard watercolor page.
+- ${isPersonalized2D ? 'For Personalized 2D Storybook, render the child with recognizable individualized facial structure and gently dimensional features, while keeping backgrounds, props, lighting, and textures clean and economical. Do not flatten the child into a generic mascot. Do not imitate any named artist, studio, franchise, or existing picture book.' : 'Follow the selected style while preserving natural, stable child facial features.'}
 - Portrait page dimensions with cinematic visual depth; vary character scale and placement rather than centering the child on every page.
 - ${kind === 'cover' ? 'Create a strong cover-worthy focal composition with room near the upper area, but do not render a title.' : 'Compose as a finished interior picture-book page.'}
 - No written words, letters, captions, logos, watermarks, frames, or speech bubbles.
@@ -93,7 +114,9 @@ export async function POST(request) {
     const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
     const size = process.env.OPENAI_IMAGE_SIZE || '1024x1536';
     const requestedQuality = String(input.quality || '').toLowerCase();
-    const quality = ['low', 'medium', 'high'].includes(requestedQuality) ? requestedQuality : (input.productType === 'mini' ? 'low' : (process.env.OPENAI_IMAGE_QUALITY || 'medium'));
+    const styleId = normalizeAmiStyle(input.style);
+    const styleDefaultQuality = styleId === 'Personalized 2D Storybook' ? 'low' : (process.env.OPENAI_IMAGE_QUALITY || 'medium');
+    const quality = ['low', 'medium', 'high'].includes(requestedQuality) ? requestedQuality : (input.productType === 'mini' ? 'low' : styleDefaultQuality);
     const scenePrompt = input?.kind === 'cover' ? input?.page?.coverPrompt || input?.page?.illustrationPrompt : input?.page?.illustrationPrompt;
     if (!scenePrompt) {
       return NextResponse.json({ error: 'This image is missing an illustration direction.' }, { status: 400 });

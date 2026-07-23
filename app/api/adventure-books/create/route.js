@@ -56,7 +56,7 @@ export async function POST(request) {
       p_interests: clean(input.interests, 500),
       p_theme: input.themeId,
       p_library_version: clean(input.libraryVersion, 80),
-      p_page_plan: Array.isArray(input.pagePlan) ? input.pagePlan.slice(0, 20) : []
+      p_page_plan: Array.isArray(input.pagePlan) ? input.pagePlan.slice(0, 15) : []
     });
     if (error) {
       const message = error.message || '';
