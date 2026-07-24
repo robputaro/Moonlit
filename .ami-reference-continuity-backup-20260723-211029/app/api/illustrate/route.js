@@ -170,7 +170,6 @@ export async function POST(request) {
     }
 
     let response;
-    let continuityFailure = '';
     const editSources = [];
     if (input.referencePhoto) editSources.push({ url: input.referencePhoto, filename: 'child-reference.jpg', role: 'child likeness reference' });
     if (input.anchorImage) editSources.push({ url: input.anchorImage, filename: 'visual-anchor.png', role: 'locked book visual anchor' });
@@ -182,7 +181,7 @@ export async function POST(request) {
         for (const source of editSources) {
           const sourceResponse = await fetch(source.url);
           if (!sourceResponse.ok) throw new Error(`${source.role} could not be loaded (${sourceResponse.status}).`);
-          body.append(editSources.length > 1 ? 'image[]' : 'image', await sourceResponse.blob(), source.filename);
+          body.append('image', await sourceResponse.blob(), source.filename);
         }
         body.append('size', size);
         body.append('quality', quality);
@@ -192,34 +191,13 @@ export async function POST(request) {
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
           body
         });
-        if (response.status === 429) {
-          const firstFailure = await response.clone().text();
-          console.warn('Continuity image edit rate limited; retrying once after 15 seconds:', firstFailure);
-          await new Promise((resolve) => setTimeout(resolve, 15000));
-          response = await fetch('https://api.openai.com/v1/images/edits', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-            body
-          });
-        }
-        if (!response.ok) {
-          continuityFailure = await response.clone().text();
-          console.warn('Continuity image edit failed; AMI will not generate without its references:', continuityFailure);
-        }
+        if (!response.ok) console.warn('Continuity image edit failed; falling back to prompt-guided generation:', await response.clone().text());
       } catch (referenceError) {
-        continuityFailure = referenceError?.message || 'Continuity references could not be prepared.';
         console.warn('Continuity references could not be used directly:', referenceError);
       }
     }
 
-    if (editSources.length && !response?.ok) {
-      console.error('OpenAI continuity image error:', continuityFailure || 'Referenced image request failed.');
-      return NextResponse.json({
-        error: 'AMI paused this illustration rather than creating an inconsistent character. Please retry this page in a moment.'
-      }, { status: response?.status === 429 ? 429 : 502 });
-    }
-
-    if (!editSources.length) {
+    if (!response?.ok) {
       response = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
         headers: {

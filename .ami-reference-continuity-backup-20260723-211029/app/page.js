@@ -848,9 +848,7 @@ export default function Home() {
 
       const anchorImage = workingStory.coverImageUrl || '';
       const remaining = workingStory.pages.map((page, index) => ({ page, index })).filter(({ page }) => !page.imageUrl);
-      // Referenced image edits are limited by input-images-per-minute.
-      // Keep batches small enough to preserve both the real photo and visual anchor.
-      const batchSize = 2;
+      const batchSize = workingStory.productType === 'mini' ? 3 : 5;
       let completed = workingStory.pages.filter((page) => page.imageUrl).length;
 
       for (let start = 0; start < remaining.length; start += batchSize) {
