@@ -6,54 +6,16 @@ import { getAmiStylePlanningNotes, getAmiStylePrompt, normalizeAmiStyle } from '
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-function compactText(value, maxLength = 1200) {
-  if (value == null) return '';
-  const text = typeof value === 'string' ? value : JSON.stringify(value);
-  return text.replace(/\s+/g, ' ').trim().slice(0, maxLength);
-}
-
-function compactContinuityBible(continuityBible = {}, page = {}) {
-  const requiredNames = new Set(
-    Array.isArray(page?.recurringProps)
-      ? page.recurringProps.map((name) => compactText(name, 120).toLowerCase())
-      : []
-  );
-  const allProps = Array.isArray(continuityBible?.recurringProps) ? continuityBible.recurringProps : [];
-  const relevantProps = allProps
-    .filter((prop) => !requiredNames.size || requiredNames.has(compactText(prop?.name, 120).toLowerCase()))
-    .slice(0, 6)
-    .map((prop) => ({
-      name: compactText(prop?.name, 120),
-      description: compactText(prop?.description, 300),
-      color: compactText(prop?.color, 120),
-      scale: compactText(prop?.scale, 160),
-      rules: compactText(prop?.rules, 300)
-    }));
-
-  return compactText({
-    world: compactText(continuityBible?.worldDescription, 700),
-    palette: compactText(continuityBible?.colorPalette, 400),
-    props: relevantProps,
-    settingRules: (Array.isArray(continuityBible?.settingLogic) ? continuityBible.settingLogic : [])
-      .slice(0, 8)
-      .map((rule) => compactText(rule, 300)),
-    forbiddenChanges: (Array.isArray(continuityBible?.forbiddenChanges) ? continuityBible.forbiddenChanges : [])
-      .slice(0, 10)
-      .map((rule) => compactText(rule, 300))
-  }, 6500);
-}
-
 function buildImagePrompt({ storyTitle, style, characterBible, continuityBible = {}, page, kind, referencePhotoAnalysis, priorScene = '', childAge = '', childPronouns = '' }) {
-  const character = compactText(characterBible?.description, 1800) || 'a cheerful young child with a warm, expressive face';
-  const wardrobe = compactText(characterBible?.lockedWardrobe, 800) || 'a simple, age-appropriate outfit that remains identical on every page';
-  const visualAnchor = compactText(characterBible?.visualAnchor, 1000) || 'same face, hair, age, proportions, outfit, and palette throughout the book';
-  const continuityText = compactContinuityBible(continuityBible, page);
-  const rawScene = kind === 'cover' ? page?.coverPrompt || page?.illustrationPrompt : page?.illustrationPrompt;
-  const scene = compactText(rawScene, 3200);
+  const character = characterBible?.description || 'a cheerful young child with a warm, expressive face';
+  const wardrobe = characterBible?.lockedWardrobe || 'a simple, age-appropriate outfit that remains identical on every page';
+  const visualAnchor = characterBible?.visualAnchor || 'same face, hair, age, proportions, outfit, and palette throughout the book';
+  const continuityText = JSON.stringify(continuityBible || {});
+  const scene = kind === 'cover' ? page?.coverPrompt || page?.illustrationPrompt : page?.illustrationPrompt;
   const styleId = normalizeAmiStyle(style);
   const stylePrompt = getAmiStylePrompt(style);
   const stylePlanning = getAmiStylePlanningNotes(style);
-  const photoProfile = referencePhotoAnalysis ? `\nPHOTO-DERIVED PROFILE: ${compactText(referencePhotoAnalysis, 2400)}` : '';
+  const photoProfile = referencePhotoAnalysis ? `\nPHOTO-DERIVED PROFILE: ${JSON.stringify(referencePhotoAnalysis)}` : '';
   const pageNumber = Number(page?.pageNumber || 1);
   const scenePlan = page?.scenePlan || {};
   const framingSequence = [
@@ -66,9 +28,9 @@ function buildImagePrompt({ storyTitle, style, characterBible, continuityBible =
   ];
   const preferredFraming = scenePlan.framing || framingSequence[(Math.max(1, pageNumber) - 1) % framingSequence.length];
 
-  const prompt = `Create one polished portrait illustration for a children's picture book.
+  return `Create one polished portrait illustration for a children's picture book.
 
-BOOK: ${compactText(storyTitle, 300) || 'AMI Story'}
+BOOK: ${storyTitle || 'AMI Story'}
 IMAGE TYPE: ${kind === 'cover' ? 'front cover artwork without any words' : 'interior story page'}
 STYLE NAME: ${styleId}
 ART DIRECTION: ${stylePrompt}
@@ -76,8 +38,8 @@ STYLE ENFORCEMENT: ${stylePlanning}
 
 LOCKED MAIN CHARACTER:
 ${character}
-Known age: ${compactText(childAge, 80) || 'Use the exact apparent age in the supplied photo and character description.'}
-Language/pronoun guidance: ${compactText(childPronouns, 160) || 'Follow the supplied character description; do not invent gender-coded features.'}
+Known age: ${childAge || 'Use the exact apparent age in the supplied photo and character description.'}
+Language/pronoun guidance: ${childPronouns || 'Follow the supplied character description; do not invent gender-coded features.'}
 Wardrobe that must remain consistent: ${wardrobe}
 Continuity anchor: ${visualAnchor}${photoProfile}
 
@@ -88,25 +50,25 @@ LOCKED STORY CONTINUITY BIBLE:
 ${continuityText || 'No extra continuity data supplied.'}
 
 PREVIOUS SCENE CONTEXT:
-${compactText(priorScene, 1200) || 'This is the first scene.'}
+${priorScene || 'This is the first scene.'}
 
 CURRENT SCENE LOCATION:
-${compactText(page?.sceneLocation, 500) || 'Use the location described in the scene.'}
+${page?.sceneLocation || 'Use the location described in the scene.'}
 
 CURRENT PAGE CONTINUITY NOTES:
-${compactText(page?.continuityNotes, 800) || 'Preserve all locked details.'}
+${page?.continuityNotes || 'Preserve all locked details.'}
 
 SCENE PLAN:
-Action: ${compactText(scenePlan.action, 400) || 'Show the story beat in action.'}
-Framing: ${compactText(preferredFraming, 400)}
-Lighting: ${compactText(scenePlan.lighting, 300) || 'story-appropriate warm lighting'}
-Mood: ${compactText(scenePlan.mood, 250) || 'warm and expressive'}
-Foreground detail: ${compactText(scenePlan.foregroundDetail, 500) || 'include meaningful foreground detail'}
-Background detail: ${compactText(scenePlan.backgroundDetail, 500) || 'include layered background storytelling'}
-Environment beat: ${compactText(scenePlan.environmentBeat, 500) || 'visually advance the journey'}
+Action: ${scenePlan.action || 'Show the story beat in action.'}
+Framing: ${preferredFraming}
+Lighting: ${scenePlan.lighting || 'story-appropriate warm lighting'}
+Mood: ${scenePlan.mood || 'warm and expressive'}
+Foreground detail: ${scenePlan.foregroundDetail || 'include meaningful foreground detail'}
+Background detail: ${scenePlan.backgroundDetail || 'include layered background storytelling'}
+Environment beat: ${scenePlan.environmentBeat || 'visually advance the journey'}
 
 RECURRING PROPS REQUIRED ON THIS PAGE:
-${Array.isArray(page?.recurringProps) ? compactText(page.recurringProps.join(', '), 700) : 'none specified'}
+${Array.isArray(page?.recurringProps) ? page.recurringProps.join(', ') : 'none specified'}
 
 SCENE:
 ${scene}
@@ -140,10 +102,6 @@ Composition and safety requirements:
 - No frightening imagery, realistic peril, shame, or medical imagery.
 - Do not depict copyrighted or famous characters.
 - Render as finished professional children's-book artwork, not a sketch or concept sheet.`;
-
-  if (prompt.length <= 30000) return prompt;
-  const nonNegotiableEnding = '\nNON-NEGOTIABLE: Preserve the supplied child’s recognizable face, apparent age, hair, skin tone, natural anatomy, and wardrobe. No giant eyes, mascot features, invented accessories, text, logos, or watermarks.';
-  return `${prompt.slice(0, 30000 - nonNegotiableEnding.length)}${nonNegotiableEnding}`;
 }
 
 export async function POST(request) {
