@@ -819,77 +819,6 @@ export default function Home() {
     return data.imageUrl;
   }
 
-  function loadStoryboardImage(source) {
-    return new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = () => reject(new Error('AMI could not open the completed storyboard sheet.'));
-      image.src = source;
-    });
-  }
-
-  async function splitStoryboardSheet({ sheetUrl, columns, rows, panelCount }) {
-    const source = await loadStoryboardImage(sheetUrl);
-    const sourcePanelWidth = source.naturalWidth / columns;
-    const sourcePanelHeight = source.naturalHeight / rows;
-    const panelWidth = 1024;
-    const panelHeight = 1536;
-    const results = [];
-
-    for (let index = 0; index < panelCount; index += 1) {
-      const column = index % columns;
-      const row = Math.floor(index / columns);
-      const canvas = document.createElement('canvas');
-      canvas.width = panelWidth;
-      canvas.height = panelHeight;
-      const context = canvas.getContext('2d', { alpha: false });
-      if (!context) throw new Error('AMI could not prepare a storyboard page.');
-      context.imageSmoothingEnabled = true;
-      context.imageSmoothingQuality = 'high';
-      context.drawImage(
-        source,
-        column * sourcePanelWidth,
-        row * sourcePanelHeight,
-        sourcePanelWidth,
-        sourcePanelHeight,
-        0,
-        0,
-        panelWidth,
-        panelHeight
-      );
-      results.push(canvas.toDataURL('image/jpeg', 0.92));
-    }
-    return results;
-  }
-
-  async function requestStoryboardSheet({ activeStory, activeStoryId, pages, anchorImage }) {
-    const response = await authenticatedFetch('/api/storyboard', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        storyTitle: activeStory.title,
-        style: activeStory.style || form.style,
-        characterBible: activeStory.characterBible,
-        continuityBible: activeStory.continuityBible || {},
-        referencePhoto: activeStory.referencePhotoUrl || referencePhoto || '',
-        referencePhotoAnalysis: activeStory.referencePhotoAnalysis || referencePhotoAnalysis,
-        anchorImage,
-        childAge: activeStory.childAge || form.age,
-        childPronouns: activeStory.childPronouns || form.pronouns,
-        pages,
-        storyId: activeStoryId,
-        productType: activeStory.productType || 'full'
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Storyboard generation failed.');
-    const images = await splitStoryboardSheet(data);
-    return pages.map((page, index) => ({
-      pageNumber: page.pageNumber,
-      imageUrl: images[index]
-    }));
-  }
-
   async function illustrateStoryOneClick(activeStory, activeStoryId) {
     if (!activeStory?.pages?.length) return activeStory;
     setStep('review');
@@ -919,45 +848,14 @@ export default function Home() {
 
       const anchorImage = workingStory.coverImageUrl || '';
       const remaining = workingStory.pages.map((page, index) => ({ page, index })).filter(({ page }) => !page.imageUrl);
-      const storyboardEnabled = Boolean(
-        process.env.NEXT_PUBLIC_AMI_STORYBOARD_ENGINE !== 'off'
-        &&
-        (workingStory.referencePhotoUrl || referencePhoto)
-        && anchorImage
-        && workingStory.productType !== 'mini'
-      );
-      const batchSize = storyboardEnabled ? 4 : 2;
+      // Referenced image edits are limited by input-images-per-minute.
+      // Keep batches small enough to preserve both the real photo and visual anchor.
+      const batchSize = 2;
       let completed = workingStory.pages.filter((page) => page.imageUrl).length;
 
       for (let start = 0; start < remaining.length; start += batchSize) {
         const batch = remaining.slice(start, start + batchSize);
-        const firstPage = Number(batch[0]?.page?.pageNumber || start + 1);
-        const lastPage = Number(batch[batch.length - 1]?.page?.pageNumber || firstPage);
-
-        if (storyboardEnabled && batch.length > 1) {
-          setLoadingMessage(`Building storyboard pages ${firstPage}–${lastPage}…`);
-          const storyboardResults = await requestStoryboardSheet({
-            activeStory: workingStory,
-            activeStoryId,
-            pages: batch.map(({ page }) => page),
-            anchorImage
-          });
-          const pageMap = new Map(storyboardResults.map((result) => [result.pageNumber, result.imageUrl]));
-          workingStory = {
-            ...workingStory,
-            storyboardEngine: 'v1',
-            pages: workingStory.pages.map((page) => pageMap.has(page.pageNumber)
-              ? { ...page, imageUrl: pageMap.get(page.pageNumber), generationMethod: 'storyboard-sheet' }
-              : page)
-          };
-          completed += storyboardResults.length;
-          setStory(workingStory);
-          setGenerationAllProgress({ current: completed + 1, total: workingStory.pages.length + 1 });
-          await autosaveStorySnapshot(workingStory, { id: activeStoryId, status: 'illustrating', silent: true });
-          continue;
-        }
-
-        setLoadingMessage(`Illustrating ${batch.length} page${batch.length === 1 ? '' : 's'}…`);
+        setLoadingMessage(`Illustrating ${batch.length} pages together…`);
         const settled = await Promise.allSettled(batch.map(async ({ page, index }) => ({
           index,
           imageUrl: await requestStoryIllustration({
@@ -2256,7 +2154,7 @@ export default function Home() {
               const completed = story.pages.filter((page) => page.imageUrl).length;
               return <div className="ami-assembly-overlay" role="status" aria-live="polite"><div className="ami-assembly-workspace">
                 <div className="ami-assembly-heading">
-                  <div><span>YOUR BOOK IS COMING TOGETHER</span><strong>{loadingMessage || (generationAllProgress.current <= 1 ? 'Creating the visual anchor' : `Painting page ${Math.max(1, generationAllProgress.current - 1)} of ${story.pages.length}`)}</strong><p>{story.characterBible?.name || form.childName || 'Your child'}’s story is written. AMI is now building each illustrated moment and saving every finished page to the shelf.</p></div>
+                  <div><span>YOUR BOOK IS COMING TOGETHER</span><strong>{generationAllProgress.current <= 1 ? 'Creating the visual anchor' : `Painting page ${Math.max(1, generationAllProgress.current - 1)} of ${story.pages.length}`}</strong><p>{story.characterBible?.name || form.childName || 'Your child'}’s story is written. AMI is now building each illustrated moment and saving every finished page to the shelf.</p></div>
                   <b>{generationAllProgress.total ? Math.round((generationAllProgress.current / generationAllProgress.total) * 100) : 0}%</b>
                 </div>
                 <div className="illustration-progress-track"><i style={{ width: `${generationAllProgress.total ? Math.round((generationAllProgress.current / generationAllProgress.total) * 100) : 0}%` }} /></div>
